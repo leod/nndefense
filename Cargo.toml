@@ -1,0 +1,8 @@
+[package]
+
+name = "nndefense"
+version = "0.0.0"
+authors = ["leod <subtle.frustration@proton.me>"]
+
+[dependencies]
+rand = "0.3.0"
