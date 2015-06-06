@@ -1,0 +1,8 @@
+[package]
+
+name = "nndefense"
+version = "0.0.0"
+authors = ["Leonard Dahlmann <leo.dahlmann@gmail.com>"]
+
+[dependencies]
+rand = "0.3.0"
