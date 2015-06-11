@@ -84,12 +84,13 @@ impl Network {
                          .all(|node| node.active)
     }
 
-    pub fn activate(&mut self, input: &Vec<(genes::NodeId, f64)>) {
-        // Set input activation to given values
+    pub fn set_input(&mut self, input: &Vec<(genes::NodeId, f64)>) {
         for &(id, activation) in input.iter() {
             self.nodes[*self.id_to_index.get(&id).unwrap()].activation = activation;
         }
+    }
 
+    pub fn activate(&mut self) {
         for try in 0..50 {
             // Calculate input activation for each non-input node
             for node_index in 0..self.nodes.len() {

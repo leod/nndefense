@@ -8,7 +8,9 @@ use genes;
 
 pub type Prob = f64;
 
+#[derive(Clone)]
 pub struct Settings {
+    // Probabilities for specific genome mutations
     pub new_node_prob: Prob,
     pub new_link_prob: Prob,
 
@@ -21,9 +23,32 @@ pub struct Settings {
     pub recurrent_link_prob: Prob,
     pub self_link_prob: Prob,
 
+    // Probabilities for different kinds of reproduction
+    pub mutate_only_prob: Prob,
+    pub mutate_after_mating_prob: Prob,
     pub no_crossover_prob: Prob,
-    pub interspecies_mating_rate: Prob,
+    pub interspecies_mating_prob: Prob,
 }
+
+pub static STANDARD_SETTINGS: Settings =
+    Settings {
+        new_node_prob: 0.01,
+        new_link_prob: 0.3,
+
+        change_link_weights_prob: 0.8,
+        change_link_weights_power: 1.0,
+        uniform_perturbation_prob: 0.9,
+
+        disable_gene_prob: 0.75,
+
+        recurrent_link_prob: 0.3,
+        self_link_prob: 0.5,
+
+        mutate_only_prob: 0.25,
+        mutate_after_mating_prob: 0.8,
+        no_crossover_prob: 0.25,
+        interspecies_mating_prob: 0.001,
+    };                   
 
 /// We keep track of new link / new node mutations that happen in a generation as 'innovations'.
 /// Roughly, we wish to give genes that are created due to the same mutation the same innovation number.
@@ -52,37 +77,31 @@ pub struct NewNodeInnovation {
 /// and the innovation numbers of the two new links
 pub type NewNodeInnovations = HashMap<NewNodeInnovation, (genes::NodeId, usize, usize)>;
 
-pub static STANDARD_SETTINGS: Settings =
-    Settings {
-        new_node_prob: 0.01,
-        new_link_prob: 0.3,
+/// Population-level state that is needed while mutating
+pub struct State {
+    // Counter for creating new node IDs
+    pub node_counter: usize,
 
-        change_link_weights_prob: 0.8,
-        change_link_weights_power: 1.0,
-        uniform_perturbation_prob: 0.9,
-
-        disable_gene_prob: 0.75,
-
-        recurrent_link_prob: 0.3,
-        self_link_prob: 0.5,
-
-        no_crossover_prob: 0.25,
-        interspecies_mating_rate: 0.001,
-    };                   
+    // Keep track of innovations
+    pub innovation_counter: usize,
+    pub link_innovations: NewLinkInnovations,
+    pub node_innovations: NewNodeInnovations,
+}
 
 pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
                             settings: &Settings,
                             rng: &mut R,
-                            node_innovations: &mut NewNodeInnovations,
-                            link_innovations: &mut NewLinkInnovations,
-                            innovation_counter: &mut usize,
-                            node_counter: &mut usize) {
+                            state: &mut State) {
     if rng.next_f64() < settings.new_node_prob {
-        new_node(genome, rng, node_innovations, innovation_counter, node_counter);
+        new_node(genome, rng, &mut state.node_innovations,
+                              &mut state.innovation_counter,
+                              &mut state.node_counter);
     }
 
     if rng.next_f64() < settings.new_link_prob {
-        new_link(genome, rng, link_innovations, innovation_counter,
+        new_link(genome, rng,
+                 &mut state.link_innovations,
+                 &mut state.innovation_counter,
                  settings.recurrent_link_prob,
                  settings.self_link_prob, 30);
     }
@@ -315,6 +334,6 @@ pub fn change_link_weights_standard<R: rand::Rng>(genome: &mut genes::Genome, rn
     change_link_weights(genome, rng, f, power);
 }
 
-pub fn change_link_weights_reset_all<R: rand::Rng, F: Fn(usize) -> LinkMutation>(genome: &mut genes::Genome, rng: &mut R, power: f64) {
+pub fn change_link_weights_reset_all<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R, power: f64) {
     change_link_weights(genome, rng, |_, _| LinkMutation::Reset, power);
 }
