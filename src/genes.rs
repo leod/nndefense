@@ -32,6 +32,7 @@ pub struct Link {
     pub is_recurrent: bool,
 }
 
+#[derive(Clone)]
 pub struct Genome {
     pub nodes: Vec<Node>,
     pub links: Vec<Link>,
