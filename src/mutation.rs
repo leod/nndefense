@@ -9,10 +9,11 @@ use genes;
 pub type Prob = f64;
 
 pub struct Settings {
-    pub add_node_prob: Prob,
-    pub add_link_prob: Prob,
+    pub new_node_prob: Prob,
+    pub new_link_prob: Prob,
 
-    pub link_weight_prob: Prob,
+    pub change_link_weights_prob: Prob,
+    pub change_link_weights_power: f64,
     pub uniform_perturbation_prob: Prob,
 
     pub disable_gene_prob: Prob,
@@ -22,9 +23,6 @@ pub struct Settings {
 
     pub no_crossover_prob: Prob,
     pub interspecies_mating_rate: Prob,
-
-    pub keep_champion_min_species_size: i32,
-    pub no_stagnant_reproduction_generations: i32,
 }
 
 /// We keep track of new link / new node mutations that happen in a generation as 'innovations'.
@@ -56,10 +54,11 @@ pub type NewNodeInnovations = HashMap<NewNodeInnovation, (genes::NodeId, usize, 
 
 pub static STANDARD_SETTINGS: Settings =
     Settings {
-        add_node_prob: 0.03,
-        add_link_prob: 0.05,
+        new_node_prob: 0.01,
+        new_link_prob: 0.3,
 
-        link_weight_prob: 0.8,
+        change_link_weights_prob: 0.8,
+        change_link_weights_power: 1.0,
         uniform_perturbation_prob: 0.9,
 
         disable_gene_prob: 0.75,
@@ -69,16 +68,31 @@ pub static STANDARD_SETTINGS: Settings =
 
         no_crossover_prob: 0.25,
         interspecies_mating_rate: 0.001,
-
-        keep_champion_min_species_size: 5,
-        no_stagnant_reproduction_generations: 15
     };                   
 
-pub fn mutate(settings: &Settings, genome: &mut genes::Genome) {
-    let num_mutations = (genome.num_nodes() as f32).sqrt().floor();
+pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
+                            settings: &Settings,
+                            rng: &mut R,
+                            node_innovations: &mut NewNodeInnovations,
+                            link_innovations: &mut NewLinkInnovations,
+                            innovation_counter: &mut usize,
+                            node_counter: &mut usize) {
+    if rng.next_f64() < settings.new_node_prob {
+        new_node(genome, rng, node_innovations, innovation_counter, node_counter);
+    }
+
+    if rng.next_f64() < settings.new_link_prob {
+        new_link(genome, rng, link_innovations, innovation_counter,
+                 settings.recurrent_link_prob,
+                 settings.self_link_prob, 30);
+    }
+
+    if rng.next_f64() < settings.change_link_weights_prob {
+        change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+    }
 }
 
-pub fn rand_pos_neg<R: rand::Rng>(rng: &mut R) -> f64 {
+fn rand_pos_neg<R: rand::Rng>(rng: &mut R) -> f64 {
     match rng.gen::<bool>() {
         true => 1.0,
         false => -1.0
@@ -87,11 +101,11 @@ pub fn rand_pos_neg<R: rand::Rng>(rng: &mut R) -> f64 {
 
 /// Add a new node to the genome by inserting it in the middle of an existing link between two nodes.
 /// This function takes a set of node innovations that happened in this generation so far as a parameter.
-pub fn new_node<R: rand::Rng>(rng: &mut R,
+pub fn new_node<R: rand::Rng>(genome: &mut genes::Genome,
+                              rng: &mut R,
                               innovations: &mut NewNodeInnovations,
                               innovation_counter: &mut usize,
-                              node_counter: &mut usize,
-                              genome: &mut genes::Genome) {
+                              node_counter: &mut usize) {
     // Select a link gene to split up. The link must not be in a disabled state. 
     let enabled_gene_indices = 
         genome.links.iter().enumerate()
@@ -159,13 +173,13 @@ pub fn new_node<R: rand::Rng>(rng: &mut R,
 
 /// Add a new link between two nodes. The two nodes are selected at random.
 /// We make `num_tries` tries to find two compatible nodes.
-pub fn new_link<R: rand::Rng>(rng: &mut R,
+pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
+                              rng: &mut R,
                               innovations: &mut NewLinkInnovations,
                               innovation_counter: &mut usize,
                               recurrent_link_prob: Prob,
                               self_link_prob: Prob,
-                              num_tries: usize,
-                              genome: &mut genes::Genome) {
+                              num_tries: usize) {
     let node_indices = (0..genome.nodes.len()-1).collect::<Vec<usize>>();
     let hidden_node_indices = 
         genome.nodes.iter().enumerate()
@@ -262,7 +276,7 @@ pub fn rand_link_mutation<R: rand::Rng>(rng: &mut R, perturbate_point: f64, rese
 /// * Perturb adds a random value in `(-power,power)` to the link weight.
 /// * Reset sets the link weight to a random value in `(-power,power)`.
 /// * None leaves the link weight unmodified.
-pub fn change_link_weights<R: rand::Rng, F: FnMut(&mut R, usize) -> LinkMutation>(rng: &mut R, mut f: F, power: f64, genome: &mut genes::Genome) {
+pub fn change_link_weights<R: rand::Rng, F: FnMut(&mut R, usize) -> LinkMutation>(genome: &mut genes::Genome, rng: &mut R, mut f: F, power: f64) {
     for (position, ref mut link) in genome.links.iter_mut().enumerate() {
         match f(rng, position) {
             LinkMutation::Perturbate =>
@@ -274,7 +288,7 @@ pub fn change_link_weights<R: rand::Rng, F: FnMut(&mut R, usize) -> LinkMutation
     }
 }
 
-pub fn change_link_weights_standard<R: rand::Rng>(rng: &mut R, rate: f64, power: f64, genome: &mut genes::Genome) {
+pub fn change_link_weights_standard<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R, rate: f64, power: f64) {
     let severe = rng.gen::<bool>();
     let num_links = genome.links.len();
 
@@ -298,9 +312,9 @@ pub fn change_link_weights_standard<R: rand::Rng>(rng: &mut R, rate: f64, power:
         }
     };
 
-    change_link_weights(rng, f, power, genome);
+    change_link_weights(genome, rng, f, power);
 }
 
-pub fn change_link_weights_reset_all<R: rand::Rng, F: Fn(usize) -> LinkMutation>(rng: &mut R, power: f64, genome: &mut genes::Genome) {
-    change_link_weights(rng, |_, _| LinkMutation::Reset, power, genome);
+pub fn change_link_weights_reset_all<R: rand::Rng, F: Fn(usize) -> LinkMutation>(genome: &mut genes::Genome, rng: &mut R, power: f64) {
+    change_link_weights(genome, rng, |_, _| LinkMutation::Reset, power);
 }

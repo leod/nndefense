@@ -24,7 +24,7 @@ pub struct Node {
 
 pub struct Network {
     id_to_index: Box<HashMap<genes::NodeId, usize>>,
-    nodes: Vec<RefCell<Node>>, // not ideal to use RefCell here I guess
+    nodes: Vec<Node>, // not ideal to use RefCell here I guess
 }
 
 impl Network {
@@ -42,7 +42,7 @@ impl Network {
             };
 
             let nodes = genome.nodes.iter().map(
-                |node| RefCell::new(Node {
+                |node| Node {
                     gene: *node,
                     predecessor_indices: genome.predecessor_links(node.id).iter()
                                                .map(|link| *id_to_index.get(&link.from_id).unwrap())
@@ -58,7 +58,7 @@ impl Network {
                     active: false,
                     input_sum: 0.0,
                     activation: 0.0,
-                }));
+                });
 
             (id_to_index.clone(), nodes.collect())
         };
@@ -70,61 +70,77 @@ impl Network {
     }
 
     pub fn num_inputs(&self) -> usize {
-        self.nodes.iter().filter(|node| node.borrow().node_type == genes::NodeType::Input).count()
+        self.nodes.iter().filter(|node| node.node_type == genes::NodeType::Input).count()
     }
 
     pub fn get_output(&self) -> Vec<(genes::NodeId, f64)> {
-        self.nodes.iter().filter(|node| node.borrow().node_type == genes::NodeType::Output)
-                         .map(|node| (node.borrow().gene.id, node.borrow().activation))
+        self.nodes.iter().filter(|node| node.node_type == genes::NodeType::Output)
+                         .map(|node| (node.gene.id, node.activation))
                          .collect()
     }
 
     pub fn are_outputs_activated(&self) -> bool {
-        self.nodes.iter().all(|node| node.borrow().node_type == genes::NodeType::Output)
+        self.nodes.iter().filter(|node| node.node_type == genes::NodeType::Output)
+                         .all(|node| node.active)
     }
 
     pub fn activate(&mut self, input: &Vec<(genes::NodeId, f64)>) {
         // Set input activation to given values
         for &(id, activation) in input.iter() {
-            self.nodes[*self.id_to_index.get(&id).unwrap()].borrow_mut().activation = activation;
+            self.nodes[*self.id_to_index.get(&id).unwrap()].activation = activation;
         }
 
-        loop {
+        for try in 0..50 {
             // Calculate input activation for each non-input node
-            for node in self.nodes.iter() {
-                if node.borrow().node_type == genes::NodeType::Input { 
-                    continue;
-                }
+            for node_index in 0..self.nodes.len() {
+                let (active, input_sum) = {
+                    let node = &self.nodes[node_index];
 
-                // Take the weighted sum of those inputs of the node that are activated.
-                // Activate when at least one of our inputs is activated.
-                node.borrow_mut().input_sum = 0.0;
-
-                for (predecessor_index, weight) in node.borrow_mut().predecessor_indices.iter().zip(node.borrow_mut().weights.iter()) {
-                    let predecessor_node = self.nodes[*predecessor_index].borrow();
-
-                    if predecessor_node.active || predecessor_node.node_type == genes::NodeType::Input {
-                        node.borrow_mut().active = true; 
-                        node.borrow_mut().input_sum += weight * predecessor_node.activation;
+                    // Take the weighted sum of those inputs of the node that are activated.
+                    // Activate when at least one of our inputs is activated.
+                    if node.node_type == genes::NodeType::Input { 
+                        continue;
                     }
-                }
+
+                    println!("{}", node.gene.id);
+
+                    node.predecessor_indices.iter()
+                        .zip(node.weights.iter())
+                        .fold((false, 0.0),
+                              |(active, input_sum), (in_index, weight)| {
+                                  let in_node = &self.nodes[*in_index];
+                                  let in_active = in_node.active || in_node.node_type == genes::NodeType::Input;
+
+                                  (active || in_active,
+                                   if in_active { input_sum + weight * in_node.activation }
+                                   else { input_sum })
+                              })
+                };
+
+                // Update state in array
+                self.nodes[node_index].active = active;
+                self.nodes[node_index].input_sum = input_sum;
             }
 
             // Calculate activation of each node based on the input we just calculated
-            for node in self.nodes.iter() {
-                if node.borrow().node_type == genes::NodeType::Input { 
+            for node in self.nodes.iter_mut() {
+                if node.node_type == genes::NodeType::Input {
                     continue;
                 }
 
-                if node.borrow().active {
-                    let activation = sigmoid(node.borrow().input_sum);
-                    node.borrow_mut().activation = activation;
+                if node.active {
+                    node.activation = sigmoid(node.input_sum);
+                    println!("activate {} with {}", node.gene.id, node.activation);
                 }
             }
 
             if self.are_outputs_activated() {
                 break;
             }
+        }
+
+        if !self.are_outputs_activated() {
+            println!("couldn't activate all outputs in time");
         }
     }
 }
