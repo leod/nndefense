@@ -5,6 +5,7 @@ use std::path::Path;
 mod genes; 
 mod mutation;
 mod nn;
+mod pop;
 
 fn main() {
     let mut genome: genes::Genome = genes::Genome {
@@ -37,14 +38,9 @@ fn main() {
         let mut link_innovations = mutation::NewLinkInnovations::new();
         let mut innovation_counter = 0;
 
-
-        if i > 15 {
-            mutation::new_link(&mut rng, &mut link_innovations, &mut innovation_counter,
-                               0.3, 0.5, 30, &mut genome);
-        } else {
-            mutation::new_node(&mut rng, &mut node_innovations, &mut innovation_counter,
-                               &mut node_counter, &mut genome);
-        }
+        mutation::mutate(&mut genome, &mutation::STANDARD_SETTINGS, &mut rng,
+                         &mut node_innovations, &mut link_innovations,
+                         &mut innovation_counter, &mut node_counter);
     }
 
     let mut network = nn::Network::from_genome(&genome);
