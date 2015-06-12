@@ -48,13 +48,18 @@ fn main() {
                     genes::Link { from_id: 1, to_id: 5, enabled: true, innovation: 4, weight: 0.0, is_recurrent: false },
                     genes::Link { from_id: 5, to_id: 3, enabled: true, innovation: 5, weight: 0.0, is_recurrent: false },
                     genes::Link { from_id: 2, to_id: 5, enabled: true, innovation: 6, weight: 0.0, is_recurrent: false }]*/
-        nodes: vec![genes::Node { id: 0, node_type: genes::NodeType::Input },
+        /*nodes: vec![genes::Node { id: 0, node_type: genes::NodeType::Input },
                     genes::Node { id: 1, node_type: genes::NodeType::Input },
                     genes::Node { id: 2, node_type: genes::NodeType::Bias },
                     genes::Node { id: 3, node_type: genes::NodeType::Output }],
         links: vec![genes::Link { from_id: 0, to_id: 3, enabled: true, innovation: 0, weight: 0.0, is_recurrent: false },
                     genes::Link { from_id: 1, to_id: 3, enabled: true, innovation: 1, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 3, enabled: true, innovation: 2, weight: 0.0, is_recurrent: false }]
+                    genes::Link { from_id: 2, to_id: 3, enabled: true, innovation: 2, weight: 0.0, is_recurrent: false }]*/
+
+        nodes: vec![
+                    genes::Node { id: 0, node_type: genes::NodeType::Input },
+                    genes::Node { id: 1, node_type: genes::NodeType::Input },
+                    genes::Node { id: 2, node_type: genes::NodeType::Hidden },
     };
 
     
