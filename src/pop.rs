@@ -234,34 +234,30 @@ impl Population {
         });
     }
 
-    /// Create a new generation of organisms
-    pub fn epoch<R: rand::Rng>(&mut self, rng: &mut R) {
+    /// Allot number of offspring for each species.
+    fn allot_offspring(&mut self) {
         let total_population = self.num_organisms();
-
-        assert!(self.species.len() > 0);
-        assert!(total_population > 0);
-
-        for species in self.species.iter_mut() {
-            species.prepare_for_epoch();
-        }
 
         let average_adj_fitness = self.average_adj_fitness();
         println!("Average fitness: {}", average_adj_fitness);
 
-        // Allot number of offspring for each species.
-        // Here the isue is that if we just round down each species' expected offspring to get whole numbers,
-        // we won't necessarily reach `total_population` again. For this reason, we carry around
+        let total_average_adj_fitness = self.species.iter().map(|species| species.average_adj_fitness())
+                                            .fold(0.0, |x,y| x+y);
+        println!("Total average fitness: {}", total_average_adj_fitness);
+
+        // Here the isue is that if we just rounded down each species' expected offspring to get whole numbers,
+        // we wouldn't necessarily reach `total_population` again. For this reason, we carry around
         // a `skim` that tells us how much fractional part we have left over.
         let mut skim: f64 = 0.0;
         let num_species = self.species.len();
         let mut expected_offspring = 0;
-        let total_average_adj_fitness = self.species.iter().map(|species| species.average_adj_fitness()).fold(0.0, |x,y| x+y);
-        println!("Total average fitness: {}", total_average_adj_fitness);
         for species in self.species.iter_mut() {
             species.allot_offspring(total_average_adj_fitness, total_population, &mut skim);
             expected_offspring += species.expected_offspring;
-            println!("Species with {} organisms, {} average fitness, {} expected offspring",
-                     species.organisms.len(), species.average_adj_fitness(), species.expected_offspring);
+
+            println!("Species with {} organisms, {} avg fit, {} offspring, {} avg num nodes",
+                     species.organisms.len(), species.average_adj_fitness(), species.expected_offspring,
+                     species.organisms.iter().map(|o| o.genome.nodes.len() as f64).fold(0.0, |x,y| x+y) / species.organisms.len() as f64);
         }
 
         // We might still not have reached `total_population`, give the rest to the best species
@@ -281,7 +277,22 @@ impl Population {
 
             self.species[best_species.unwrap()].expected_offspring += total_population - expected_offspring;
         }
+    }
 
+
+    /// Create a new generation of organisms
+    pub fn epoch<R: rand::Rng>(&mut self, rng: &mut R) {
+        let total_population = self.num_organisms();
+
+        assert!(self.species.len() > 0);
+        assert!(total_population > 0);
+
+        for species in self.species.iter_mut() {
+            species.prepare_for_epoch();
+        }
+
+        self.allot_offspring();
+        
         // Only allow the elite of each species to reproduce
         self.species.retain(|species| species.expected_offspring > 0);
 
@@ -304,14 +315,12 @@ impl Population {
             }
         }
 
+        self.node_counter = mutation_state.node_counter;
+        self.innovation_counter = mutation_state.innovation_counter;
+
         for species in self.species.iter_mut() {
             species.prune_to_champ();
         }
-
-        //assert!(offspring.len() == total_population);
-
-        self.node_counter = mutation_state.node_counter;
-        self.innovation_counter = mutation_state.innovation_counter;
 
         for organism in offspring.iter() {
             self.insert_organism(organism.clone());
