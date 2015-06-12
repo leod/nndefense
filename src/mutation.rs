@@ -175,14 +175,13 @@ pub fn new_node<R: rand::Rng>(genome: &mut genes::Genome,
                                           weight: link.weight,
                                           is_recurrent: false }; // ???
                 let node = genes::Node { id: new_node_id,
-                                         node_type: genes::NodeType::Hidden,
-                                         bias: 0.0 };
+                                         node_type: genes::NodeType::Hidden };
 
                 (link1, link2, node)
             };
 
-            genome.links.push(link1);
-            genome.links.push(link2);
+            genome.add_link(link1);
+            genome.add_link(link2);
             genome.nodes.push(node);
         }
 
@@ -199,36 +198,47 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
                               recurrent_link_prob: Prob,
                               self_link_prob: Prob,
                               num_tries: usize) {
-    let node_indices = (0..genome.nodes.len()-1).collect::<Vec<usize>>();
-    let hidden_node_indices = 
-        genome.nodes.iter().enumerate()
-              .filter(|&(i, node)| node.node_type == genes::NodeType::Hidden)
-              .map(|(i, link)| i).collect::<Vec<usize>>();
+    let node_ids =
+        genome.nodes.iter()
+              .map(|node| node.id)
+              .collect::<Vec<usize>>();
 
-    if node_indices.is_empty() || hidden_node_indices.is_empty() {
+    let hidden_node_ids = 
+        genome.nodes.iter()
+              .filter(|node| node.node_type == genes::NodeType::Hidden)
+              .map(|node| node.id)
+              .collect::<Vec<usize>>();
+
+    if node_ids.is_empty() || hidden_node_ids.is_empty() {
         return;
     }
 
     // Decide whether to create a recurrent or a feed-forward link
     let recurrent = rng.next_f64() < recurrent_link_prob;
 
+    if recurrent { println!("{}", "creating recurrent link"); }
+
     // Randomly select from and to node until they fit our criterion
-    let mut from_index = 0;
-    let mut to_index = 0;
+    let mut from_id = 0;
+    let mut to_id = 0;
     let mut found = false;
 
     for try in 0..num_tries {
         if recurrent && rng.next_f64() < self_link_prob {
             // Sometimes make a self loop
-            from_index = *rng.choose(&hidden_node_indices).unwrap();
-            to_index = from_index 
+            from_id = *rng.choose(&hidden_node_ids).unwrap();
+            to_id = to_id 
         } else {
-            from_index = *rng.choose(&node_indices).unwrap();
-            to_index = *rng.choose(&hidden_node_indices).unwrap();
+            from_id = *rng.choose(&node_ids).unwrap();
+            to_id = *rng.choose(&hidden_node_ids).unwrap();
         }
 
-        if !genome.is_link(from_index, to_index) &&
-           genome.is_new_link_recurrent(from_index, to_index) == recurrent {
+        if !recurrent && from_id == to_id {
+            continue;
+        }
+
+        if !genome.is_link(from_id, to_id) &&
+           genome.is_new_link_recurrent(from_id, to_id) == recurrent {
             found = true;
             break;
         }
@@ -238,56 +248,54 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
         return
     }
 
-    let from_node = &genome.nodes[from_index];
-    let to_node = &genome.nodes[to_index];
+    let link = {
+        let from_node = genome.get_node(from_id);
+        let to_node = genome.get_node(to_id);
 
-    // See if this innovation has already happened in this generation.
-    // If yes, we will use the same innovation number for the new link gene.
-    let new_link_innov = NewLinkInnovation { from_id: from_node.id,
-                                             to_id: to_node.id,
-                                             is_recurrent: recurrent };
+        // See if this innovation has already happened in this generation.
+        // If yes, we will use the same innovation number for the new link gene.
+        let new_link_innov = NewLinkInnovation { from_id: from_node.id,
+                                                 to_id: to_node.id,
+                                                 is_recurrent: recurrent };
 
-    let (is_new, innovation) = match innovations.get(&new_link_innov) {
-        Some(innovation) => (false, *innovation), 
-        None => {
-            // We have a new innovation
-            *innovation_counter += 1;
-            (true, *innovation_counter-1)
+        let (is_new, innovation) = match innovations.get(&new_link_innov) {
+            Some(innovation) => (false, *innovation), 
+            None => {
+                // We have a new innovation
+                *innovation_counter += 1;
+                (true, *innovation_counter-1)
+            }
+        };
+
+        if is_new {
+            innovations.insert(new_link_innov, innovation);
         }
+
+        // Create the new link gene    
+        let weight = rand_pos_neg(rng) * rng.next_f64();
+        let link = genes::Link { from_id: from_node.id, 
+                                 to_id: to_node.id,
+                                 enabled: true,
+                                 innovation: innovation,
+                                 weight: weight,
+                                 is_recurrent: recurrent };
+        link
     };
 
-    if is_new {
-        innovations.insert(new_link_innov, innovation);
-    }
+    genome.add_link(link);
+}
 
-    // Create the new link gene    
-    let weight = rand_pos_neg(rng) * rng.next_f64();
-    let link = genes::Link { from_id: from_node.id, 
-                             to_id: to_node.id,
-                             enabled: true,
-                             innovation: innovation,
-                             weight: weight,
-                             is_recurrent: recurrent };
-
-    genome.links.push(link);
+/// Toggle the enabled state of a random link
+pub fn toggle_enable<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R) {
+    // Take a random link gene 
+    let gene_indices = genome.links.iter().enumerate().map(|(i, link)| i)
+              .collect::<Vec<usize>>();
 }
 
 pub enum LinkMutation {
     Perturbate,
     Reset,
     None
-}
-
-pub fn rand_link_mutation<R: rand::Rng>(rng: &mut R, perturbate_point: f64, reset_point: f64) -> LinkMutation {
-    let rand_choice: f64 = rng.next_f64();
-
-    if rand_choice > perturbate_point {
-        LinkMutation::Perturbate
-    } else if rand_choice > reset_point {
-        LinkMutation::Reset
-    } else {
-        LinkMutation::None
-    }
 }
 
 /// Apply a link weight mutation to each gene in the genome.
@@ -304,6 +312,21 @@ pub fn change_link_weights<R: rand::Rng, F: FnMut(&mut R, usize) -> LinkMutation
                 link.weight = rand_pos_neg(rng) * rng.next_f64() * power,
             LinkMutation::None => (),
         }
+
+        if link.weight > 8.0 { link.weight = 8.0; }
+        if link.weight < -8.0 { link.weight = -8.0; }
+    }
+}
+
+fn rand_link_mutation<R: rand::Rng>(rng: &mut R, perturbate_point: f64, reset_point: f64) -> LinkMutation {
+    let rand_choice: f64 = rng.next_f64();
+
+    if rand_choice > perturbate_point {
+        LinkMutation::Perturbate
+    } else if rand_choice > reset_point {
+        LinkMutation::Reset
+    } else {
+        LinkMutation::None
     }
 }
 

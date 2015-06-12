@@ -6,23 +6,23 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum NodeType {
     Input,
     Output,
     Hidden,
+    Bias,
 }
 
 pub type NodeId = usize;
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub struct Node {
     pub id: NodeId,
     pub node_type: NodeType,
-    pub bias: f64,
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub struct Link {
     pub from_id: NodeId,
     pub to_id: NodeId,
@@ -32,19 +32,85 @@ pub struct Link {
     pub is_recurrent: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Genome {
     pub nodes: Vec<Node>,
-    pub links: Vec<Link>,
+    pub links: Vec<Link>, // Sorted by innovation number in increasing order
 }
 
+#[derive(Clone, Debug)]
 pub struct CompatCoefficients {
     pub disjoint: f64,
     pub excess: f64,
     pub weight_diff: f64,
 }
 
+pub static STANDARD_COMPAT_COEFFICIENTS: CompatCoefficients = CompatCoefficients {
+    disjoint: 1.0,
+    excess: 1.0,
+    weight_diff: 3.0,
+};
+
+pub fn compatibility(c: &CompatCoefficients,
+                     genome_a: &Genome, genome_b: &Genome) -> f64 {
+    let mut i = 0;
+    let mut j = 0;
+
+    let mut num_disjoint = 0;
+    let mut num_excess = 0;
+
+    let mut num_matching = 0;
+    let mut weight_diff = 0.0;
+
+    // Iterate through the links of both genomes, counting matches in innovation
+    while i < genome_a.links.len() || j < genome_b.links.len() {
+        if i == genome_a.links.len() {
+            j += 1;
+            num_excess += 1;
+            continue;
+        }
+        if j == genome_b.links.len() {
+            i += 1;
+            num_excess += 1;
+            continue;
+        }
+
+        let gene_a = &genome_a.links[i];
+        let gene_b = &genome_b.links[j];
+
+        if gene_a.innovation == gene_b.innovation {
+            weight_diff += (gene_a.weight - gene_b.weight).abs();
+            num_matching += 1;
+            i += 1;
+            j += 1;
+        } else if gene_a.innovation > gene_b.innovation {
+            num_disjoint += 1;
+            j += 1;
+        } else {
+            num_disjoint += 1;
+            i += 1;
+        }
+    }
+
+    return c.disjoint * num_disjoint as f64 +
+           c.excess * num_excess as f64 +
+           c.weight_diff * (weight_diff / num_matching as f64);
+}
+
 impl Genome {
+    /// Adds a new link to the genome, keeping the list sorted by innovation number
+    pub fn add_link(&mut self, new_link: Link) {
+        assert!(!self.is_link(new_link.from_id, new_link.to_id));
+
+        // Try to find the position of the first link having a bigger innovation number than the new link
+        match self.links.iter().position(|link| link.innovation > new_link.innovation) {
+            Some(position) =>
+                self.links.insert(position, new_link),
+            None =>
+                self.links.push(new_link)
+        }
+    }
+
     pub fn num_nodes(&self) -> usize {
         self.nodes.len() //self.nodes.iter().filter(|node| node.enabled).count();
     }
@@ -103,7 +169,7 @@ impl Genome {
         // Here, we only use links that are considered feed forward in the network.
 
         let mut visited = BTreeSet::new();
-        let mut queue = vec![from_id];
+        let mut queue = vec![to_id];
 
         while let Some(node_id) = queue.pop() {
             visited.insert(node_id);
@@ -138,6 +204,9 @@ impl Genome {
             str.push_str(&link.from_id.to_string());
             str.push_str(" -> ");
             str.push_str(&link.to_id.to_string());
+            str.push_str(" [label=");
+            str.push_str(&link.weight.to_string());
+            str.push_str("];");
             str.push_str("\n");
         }
 
