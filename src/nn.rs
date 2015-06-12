@@ -8,13 +8,13 @@ pub fn sigmoid(input_sum: f64) -> f64 {
     (1.0 / (1.0 + (-slope*input_sum).exp()))
 }
 
+#[derive(Debug, Clone)]
 pub struct Node {
     gene: genes::Node,
 
     predecessor_indices: Vec<usize>,
     successor_indices: Vec<usize>,
     weights: Vec<f64>,
-    bias: f64,
     node_type: genes::NodeType,
 
     active: bool,
@@ -22,9 +22,10 @@ pub struct Node {
     activation: f64,
 }
 
+#[derive(Debug, Clone)]
 pub struct Network {
     id_to_index: Box<HashMap<genes::NodeId, usize>>,
-    nodes: Vec<Node>, // not ideal to use RefCell here I guess
+    nodes: Vec<Node>, 
 }
 
 impl Network {
@@ -53,11 +54,10 @@ impl Network {
                     weights: genome.predecessor_links(node.id).iter()
                                    .map(|link| link.weight)
                                    .collect(),
-                    bias: node.bias,
                     node_type: node.node_type,
                     active: false,
                     input_sum: 0.0,
-                    activation: 0.0,
+                    activation: if node.node_type == genes::NodeType::Bias { 1.0 } else { 0.0 },
                 });
 
             (id_to_index.clone(), nodes.collect())
@@ -90,33 +90,51 @@ impl Network {
         }
     }
 
+    /// Resets the state of the network, setting all nodes to inactive
+    pub fn flush(&mut self) {
+        for node in self.nodes.iter_mut() {
+            node.active = false;
+            node.activation = if node.node_type == genes::NodeType::Bias { 1.0 } else { 0.0 };
+        }
+    }
+
     pub fn activate(&mut self) {
+        /*for node in self.nodes.iter_mut() {
+            if node.node_type == genes::NodeType::Input {
+                println!("INPUT: {}, {}", node.gene.id, node.activation);
+            }
+            if node.node_type == genes::NodeType::Bias {
+                println!("BIAS: {}, {}", node.gene.id, node.activation);
+            }
+        }*/
+
         for try in 0..50 {
             // Calculate input activation for each non-input node
             for node_index in 0..self.nodes.len() {
                 let (active, input_sum) = {
                     let node = &self.nodes[node_index];
 
-                    // Take the weighted sum of those inputs of the node that are activated.
-                    // Activate when at least one of our inputs is activated.
-                    if node.node_type == genes::NodeType::Input { 
+                    if node.node_type == genes::NodeType::Input || node.node_type == genes::NodeType::Bias { 
                         continue;
                     }
 
-                    println!("{}", node.gene.id);
-
+                    // Take the weighted sum of those inputs of the node that are activated.
+                    // Activate when at least one of our inputs is activated.
                     node.predecessor_indices.iter()
                         .zip(node.weights.iter())
                         .fold((false, 0.0),
                               |(active, input_sum), (in_index, weight)| {
                                   let in_node = &self.nodes[*in_index];
-                                  let in_active = in_node.active || in_node.node_type == genes::NodeType::Input;
+                                  let in_active = in_node.active || in_node.node_type == genes::NodeType::Input
+                                                                 || in_node.node_type == genes::NodeType::Bias;
 
                                   (active || in_active,
                                    if in_active { input_sum + weight * in_node.activation }
                                    else { input_sum })
                               })
                 };
+
+                //println!("activate {} with {}", self.nodes[node_index].gene.id, input_sum);
 
                 // Update state in array
                 self.nodes[node_index].active = active;
@@ -125,13 +143,12 @@ impl Network {
 
             // Calculate activation of each node based on the input we just calculated
             for node in self.nodes.iter_mut() {
-                if node.node_type == genes::NodeType::Input {
+                if node.node_type == genes::NodeType::Input || node.node_type == genes::NodeType::Bias {
                     continue;
                 }
 
                 if node.active {
                     node.activation = sigmoid(node.input_sum);
-                    println!("activate {} with {}", node.gene.id, node.activation);
                 }
             }
 

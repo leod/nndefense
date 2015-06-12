@@ -9,12 +9,15 @@ use nn;
 #[derive(Clone)]
 pub struct Settings {
     pub survival_threshold: f64,
+    pub compat_threshold: f64,
 }
 
 pub static STANDARD_SETTINGS: Settings = Settings {
-    survival_threshold: 0.2
+    survival_threshold: 0.4,
+    compat_threshold: 12.0
 };
 
+#[derive(Clone)]
 pub struct Organism {
     pub genome: genes::Genome,
     pub network: nn::Network,
@@ -37,28 +40,34 @@ impl Organism {
 }
 
 pub struct Species {
-    organisms: Vec<Organism>,
+    pub organisms: Vec<Organism>,
 
-    average_adj_fitness: f64,
     expected_offspring: usize,
 }
 
 pub struct Population {
     settings: Settings,
     mutation_settings: mutation::Settings,
+    compat_coefficients: genes::CompatCoefficients,
 
     node_counter: usize,
-    species: Vec<Species>,
+    innovation_counter: usize,
+    pub species: Vec<Species>,
 }
 
 impl Species {
     pub fn average_adj_fitness(&self) -> f64 {
-        self.organisms.iter().map(|organism| organism.adj_fitness).fold(0.0, |x,y| x+y)
+        self.organisms.iter().map(|organism| organism.adj_fitness).fold(0.0, |x,y| x+y) /
+            self.organisms.len() as f64
+    }
+
+    pub fn best_organism(&self) -> &Organism {
+        return &self.organisms[0];
     }
 
     /// Calculate organisms' adjusted fitness by dividing by species size (fitness sharing).
     /// Then, the organisms of the species are sorted by their adjusted fitness.
-    pub fn prepare_for_epoch(&mut self, survival_threshold: f64) {
+    pub fn prepare_for_epoch(&mut self) {
         let num_organisms = self.organisms.len();
 
         for organism in self.organisms.iter_mut() {
@@ -71,16 +80,22 @@ impl Species {
             organism.adj_fitness = organism.fitness / num_organisms as f64;
         }
 
-        self.average_adj_fitness = self.average_adj_fitness();
-
         self.organisms.sort_by(
             |a, b| b.adj_fitness.partial_cmp(&a.adj_fitness).unwrap_or(Ordering::Equal));
+    }
 
-        // Before reproducing, delete the lowest performing members of the species -
-        // only the fittest can reproduce
-        let num_parents = (survival_threshold * (num_organisms as f64) + 1.0).floor() as usize; // at least one offspring
+    /// Before reproducing, delete the lowest performing members of the species -
+    /// only the fittest can reproduce
+    pub fn prune_to_elite(&mut self, survival_threshold: f64) {
+        let num_organisms = self.organisms.len() as f64;
+        let num_parents = (survival_threshold * num_organisms + 1.0).floor() as usize; // at least keep the champion
 
         self.organisms.truncate(num_parents);
+    }
+
+    /// Only keep the best organism
+    pub fn prune_to_champ(&mut self) {
+        self.organisms.truncate(1);
     }
 
     /// Each species is assigned a number of expected offspring based on its share of the total fitness pie.
@@ -89,7 +104,7 @@ impl Species {
                            total_average_adj_fitness: f64,
                            total_population: usize,
                            skim: &mut f64) {
-        let expected_offspring = self.average_adj_fitness / total_average_adj_fitness *
+        let expected_offspring = self.average_adj_fitness() / total_average_adj_fitness *
                                  total_population as f64;
 
         let int_part = expected_offspring.floor() as usize;
@@ -98,7 +113,7 @@ impl Species {
         self.expected_offspring = int_part;
         *skim += fract_part;
 
-        if fract_part + *skim >= 1.0 {
+        if *skim >= 1.0 {
             // Combine the previous fractional part with our fractional part to get more offspring
             self.expected_offspring += skim.floor() as usize;
             *skim -= skim.floor();
@@ -109,13 +124,13 @@ impl Species {
                                    mutation_settings: &mutation::Settings,
                                    rng: &mut R,
                                    mutation_state: &mut mutation::State) -> Vec<Organism> {
+        assert!(self.expected_offspring > 0);
         assert!(self.organisms.len() > 0, "Empty species cannot reproduce");
 
         // Create as many organisms as we are allotted
         let mut offspring = Vec::<Organism>::new();
 
-        while offspring.len() < self.expected_offspring {
-            println!("{}{}", "Yo", self.expected_offspring);
+        while offspring.len() < self.expected_offspring - 1 { // Leave room for the champ
             if rng.next_f64() < mutation_settings.mutate_only_prob {
                 // Pick one organism and just mutate it and that's the new offspring
                 let organism_index = rng.gen_range(0, self.organisms.len());
@@ -140,6 +155,7 @@ impl Population {
     pub fn from_initial_genome<R: rand::Rng>(rng: &mut R,
                                              settings: &Settings,
                                              mutation_settings: &mutation::Settings,
+                                             compat_coefficients: &genes::CompatCoefficients,
                                              genome: &genes::Genome,
                                              total_population: usize) -> Population {
         assert!(genome.nodes.len() > 0, "Cannot start with empty genome");
@@ -158,13 +174,14 @@ impl Population {
         let species = Species {
             organisms: organisms,
             expected_offspring: 0,
-            average_adj_fitness: 0.0
         };
 
         Population {
             settings: settings.clone(),
             mutation_settings: mutation_settings.clone(),
+            compat_coefficients: compat_coefficients.clone(),
             node_counter: genome.nodes.iter().map(|node| node.id).max().unwrap() + 1,
+            innovation_counter: 0,
             species: vec![species]
         }
     }
@@ -180,12 +197,52 @@ impl Population {
         / self.species.len() as f64
     }
 
+    pub fn best_organism(&mut self) -> Option<&mut Organism> {
+        let mut best = None;
+        let mut best_fitness = 0.0;
+
+        for species in self.species.iter_mut() {
+            for organism in species.organisms.iter_mut() {
+                if organism.fitness > best_fitness  {
+                    best_fitness = organism.fitness;
+                    best = Some(organism);
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /// Insert organisms into the first species they match
+    pub fn insert_organism(&mut self, organism: Organism) { 
+        assert!(self.species.len() > 0);
+
+        for i in 0..self.species.len() {
+            if genes::compatibility(&self.compat_coefficients,
+                                    &self.species[i].best_organism().genome,
+                                    &organism.genome) < self.settings.compat_threshold {
+                self.species[i].organisms.push(organism);
+                return;
+            }
+        }
+
+        // No matching species found - create a new one
+        println!("Creating new species");
+        self.species.push(Species {
+            organisms: vec![organism],
+            expected_offspring: 0
+        });
+    }
+
     /// Create a new generation of organisms
     pub fn epoch<R: rand::Rng>(&mut self, rng: &mut R) {
         let total_population = self.num_organisms();
 
+        assert!(self.species.len() > 0);
+        assert!(total_population > 0);
+
         for species in self.species.iter_mut() {
-            species.prepare_for_epoch(self.settings.survival_threshold);
+            species.prepare_for_epoch();
         }
 
         let average_adj_fitness = self.average_adj_fitness();
@@ -196,34 +253,79 @@ impl Population {
         // we won't necessarily reach `total_population` again. For this reason, we carry around
         // a `skim` that tells us how much fractional part we have left over.
         let mut skim: f64 = 0.0;
+        let num_species = self.species.len();
+        let mut expected_offspring = 0;
+        let total_average_adj_fitness = self.species.iter().map(|species| species.average_adj_fitness()).fold(0.0, |x,y| x+y);
+        println!("Total average fitness: {}", total_average_adj_fitness);
         for species in self.species.iter_mut() {
-            species.allot_offspring(average_adj_fitness, total_population, &mut skim);
+            species.allot_offspring(total_average_adj_fitness, total_population, &mut skim);
+            expected_offspring += species.expected_offspring;
+            println!("Species with {} organisms, {} average fitness, {} expected offspring",
+                     species.organisms.len(), species.average_adj_fitness(), species.expected_offspring);
+        }
+
+        // We might still not have reached `total_population`, give the rest to the best species
+        assert!(expected_offspring <= total_population);
+
+        {
+            // gahhhh
+            let mut best_species = None;
+            let mut best_fitness = 0.0;
+
+            for i in 0..self.species.len() {
+                if self.species[i].best_organism().fitness > best_fitness {
+                    best_species = Some(i);
+                    best_fitness = self.species[i].best_organism().fitness;
+                }
+            }
+
+            self.species[best_species.unwrap()].expected_offspring += total_population - expected_offspring;
+        }
+
+        // Only allow the elite of each species to reproduce
+        self.species.retain(|species| species.expected_offspring > 0);
+
+        for species in self.species.iter_mut() {
+            species.prune_to_elite(self.settings.survival_threshold);
         }
 
         // While reproducing, keep track of the genetic innovations in this generation
         let mut offspring = Vec::<Organism>::new();
         let mut mutation_state = mutation::State {
             node_counter: self.node_counter,
-            innovation_counter: 0,
+            innovation_counter: self.innovation_counter,
             link_innovations: mutation::NewLinkInnovations::new(),
             node_innovations: mutation::NewNodeInnovations::new()
         };
 
         for species in self.species.iter() {
-            println!("before: {}", offspring.len());
-            offspring.extend(species.reproduce(&self.mutation_settings, rng, &mut mutation_state));
-            println!("after: {}", offspring.len());
+            if species.expected_offspring > 0 {
+                offspring.extend(species.reproduce(&self.mutation_settings, rng, &mut mutation_state));
+            }
         }
 
-        assert!(offspring.len() == total_population);
+        for species in self.species.iter_mut() {
+            species.prune_to_champ();
+        }
+
+        //assert!(offspring.len() == total_population);
 
         self.node_counter = mutation_state.node_counter;
+        self.innovation_counter = mutation_state.innovation_counter;
 
-        // Just put them all into one species for now, replacing all the organisms we had by the new ones
-        self.species = vec![Species {
-            organisms: offspring,
-            average_adj_fitness: 0.0,
-            expected_offspring: 0
-        }];
+        for organism in offspring.iter() {
+            self.insert_organism(organism.clone());
+        }
+
+        // Delete any species that is now empty
+        for species in self.species.iter() {
+            if species.organisms.len() == 0 {
+                println!("{}", "EMPTY SPECIES!");
+            }
+        }
+
+        //self.species.retain(|species| species.organisms.len() > 0 && species.expected_offspring > 0);
+
+        assert_eq!(self.species.iter().map(|species| species.organisms.len()).fold(0, |x,y| x+y), total_population);
     }
 }
