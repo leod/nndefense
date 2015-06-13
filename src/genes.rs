@@ -98,9 +98,33 @@ pub fn compatibility(c: &CompatCoefficients,
 }
 
 impl Genome {
+    pub fn assert_integrity(&self) {
+        for link in self.links.iter() {
+            assert!(self.is_link(link.from_id, link.to_id));
+            assert!(self.is_node(link.from_id));
+            assert!(self.is_node(link.to_id));
+        }
+
+        for node in self.nodes.iter() { 
+            assert!(self.is_node(node.id));
+        }
+
+        {
+            assert!(self.links.len() > 0);
+
+            for i in 0..self.links.len()-1 {
+                assert!(self.links[i].innovation < self.links[i+1].innovation);
+            }
+        }
+    }
+
     /// Adds a new link to the genome, keeping the list sorted by innovation number
     pub fn add_link(&mut self, new_link: Link) {
+        assert!(self.is_node(new_link.from_id));
+        assert!(self.is_node(new_link.to_id));
         assert!(!self.is_link(new_link.from_id, new_link.to_id));
+
+        //println!("{:?}", self.links.iter().map(|l| l.innovation).collect::<Vec<usize>>());
 
         // Try to find the position of the first link having a bigger innovation number than the new link
         match self.links.iter().position(|link| link.innovation > new_link.innovation) {
@@ -109,6 +133,7 @@ impl Genome {
             None =>
                 self.links.push(new_link)
         }
+        //println!("=> {:?}", self.links.iter().map(|l| l.innovation).collect::<Vec<usize>>());
     }
 
     pub fn num_nodes(&self) -> usize {
@@ -128,6 +153,10 @@ impl Genome {
         return count == 1;
     }
 
+    pub fn get_link(&self, from_id: NodeId, to_id: NodeId) -> Option<&Link> {
+        self.links.iter().filter(|link| link.from_id == from_id && link.to_id == to_id).next()
+    }
+
     pub fn is_node(&self, id: NodeId) -> bool {
         let count = self.nodes.iter().filter(|node| node.id == id).count();
         assert!(count == 0 || count == 1, "More than one node with the same id");
@@ -135,11 +164,8 @@ impl Genome {
         return count == 1;
     }
 
-    pub fn get_node(&self, id: NodeId) -> &Node {
-        assert!(self.is_node(id));
-        let mut matches = self.nodes.iter().filter(|node| node.id == id);
-        
-        return matches.next().unwrap();
+    pub fn get_node(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.iter().filter(|node| node.id == id).next()
     }
 
     pub fn successor_links(&self, from_id: NodeId) -> Vec<&Link> {
