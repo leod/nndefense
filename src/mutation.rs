@@ -36,7 +36,7 @@ pub static STANDARD_SETTINGS: Settings =
         new_link_prob: 0.3,
 
         change_link_weights_prob: 0.8,
-        change_link_weights_power: 1.0,
+        change_link_weights_power: 0.3,
         uniform_perturbation_prob: 0.9,
 
         disable_gene_prob: 0.75,
@@ -93,20 +93,20 @@ pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
                             rng: &mut R,
                             state: &mut State) {
     if rng.next_f64() < settings.new_node_prob {
+        //println!("NEW NODE");
         new_node(genome, rng, &mut state.node_innovations,
                               &mut state.innovation_counter,
                               &mut state.node_counter);
-    }
-
-    if rng.next_f64() < settings.new_link_prob {
+    } else if rng.next_f64() < settings.new_link_prob {
+        //println!("NEW LINK");
         new_link(genome, rng,
                  &mut state.link_innovations,
                  &mut state.innovation_counter,
                  settings.recurrent_link_prob,
                  settings.self_link_prob, 30);
-    }
-
-    if rng.next_f64() < settings.change_link_weights_prob {
+    } else if rng.next_f64() < settings.change_link_weights_prob {
+        let p = 1.0 / (genome.links.len() as f64).sqrt();
+        //change_link_weights_perturbate_some(genome, rng, 1.0, settings.change_link_weights_power);
         change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
     }
 }
@@ -145,9 +145,12 @@ pub fn new_node<R: rand::Rng>(genome: &mut genes::Genome,
                                                          to_id: link.to_id,
                                                          old_innovation: link.innovation };
 
+                //println!("split from {} to {} old {}", link.from_id, link.to_id, link.innovation);
+
                 let (is_new, (new_node_id, innovation1, innovation2)) = match innovations.get(&new_node_innov) {
                     Some(numbers) => (false, *numbers), 
                     None => {
+                        //println!("new innovation");
                         // We have a new innovation
                         *node_counter += 1;
                         *innovation_counter += 2;
@@ -180,9 +183,9 @@ pub fn new_node<R: rand::Rng>(genome: &mut genes::Genome,
                 (link1, link2, node)
             };
 
+            genome.nodes.push(node);
             genome.add_link(link1);
             genome.add_link(link2);
-            genome.nodes.push(node);
         }
 
         None => ()
@@ -249,8 +252,8 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
     }
 
     let link = {
-        let from_node = genome.get_node(from_id);
-        let to_node = genome.get_node(to_id);
+        let from_node = genome.get_node(from_id).unwrap();
+        let to_node = genome.get_node(to_id).unwrap();
 
         // See if this innovation has already happened in this generation.
         // If yes, we will use the same innovation number for the new link gene.
@@ -304,7 +307,7 @@ pub enum LinkMutation {
 /// * Reset sets the link weight to a random value in `(-power,power)`.
 /// * None leaves the link weight unmodified.
 pub fn change_link_weights<R: rand::Rng, F: FnMut(&mut R, usize) -> LinkMutation>(genome: &mut genes::Genome, rng: &mut R, mut f: F, power: f64) {
-    for (position, ref mut link) in genome.links.iter_mut().enumerate() {
+    for (position, link) in genome.links.iter_mut().enumerate() {
         match f(rng, position) {
             LinkMutation::Perturbate =>
                 link.weight += rand_pos_neg(rng) * rng.next_f64() * power,
@@ -355,6 +358,10 @@ pub fn change_link_weights_standard<R: rand::Rng>(genome: &mut genes::Genome, rn
     };
 
     change_link_weights(genome, rng, f, power);
+}
+
+pub fn change_link_weights_perturbate_some<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R, prob: f64, power: f64) {
+    change_link_weights(genome, rng, |rng, _| if rng.next_f64() < prob { LinkMutation::Perturbate } else { LinkMutation::None }, power);
 }
 
 pub fn change_link_weights_reset_all<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R, power: f64) {
