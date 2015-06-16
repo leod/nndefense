@@ -18,10 +18,10 @@ pub struct Settings {
     pub change_link_weights_power: f64,
     pub uniform_perturbation_prob: Prob,
 
-    pub disable_gene_prob: Prob,
-
     pub recurrent_link_prob: Prob,
     pub self_link_prob: Prob,
+
+    pub toggle_enable_prob: Prob,
 
     // Probabilities for different kinds of reproduction
     pub mutate_only_prob: Prob,
@@ -36,13 +36,13 @@ pub static STANDARD_SETTINGS: Settings =
         new_link_prob: 0.3,
 
         change_link_weights_prob: 0.8,
-        change_link_weights_power: 0.3,
+        change_link_weights_power: 0.5,
         uniform_perturbation_prob: 0.9,
-
-        disable_gene_prob: 0.75,
 
         recurrent_link_prob: 0.3,
         self_link_prob: 0.5,
+
+        toggle_enable_prob: 0.05,
 
         mutate_only_prob: 0.25,
         mutate_after_mating_prob: 0.8,
@@ -104,10 +104,16 @@ pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
                  &mut state.innovation_counter,
                  settings.recurrent_link_prob,
                  settings.self_link_prob, 30);
-    } else if rng.next_f64() < settings.change_link_weights_prob {
-        let p = 1.0 / (genome.links.len() as f64).sqrt();
-        //change_link_weights_perturbate_some(genome, rng, 1.0, settings.change_link_weights_power);
-        change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+    } else {
+        if rng.next_f64() < settings.toggle_enable_prob {
+            toggle_enable(genome, rng);
+        }
+
+        if rng.next_f64() < settings.change_link_weights_prob {
+            let p = 1.0 / (genome.links.len() as f64).sqrt();
+            change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+            //change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
+        }
     }
 }
 
@@ -117,6 +123,33 @@ fn rand_pos_neg<R: rand::Rng>(rng: &mut R) -> f64 {
         false => -1.0
     }
 }
+
+/// Toggles the enabled status of a random link gene
+pub fn toggle_enable<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R) {
+    let gene_indices = (0..genome.links.len()).collect::<Vec<usize>>();
+
+    match rng.choose(&gene_indices) {
+        Some(index) => {
+            if genome.links[*index].enabled {
+                // Check that the in node of the link has another outgoing link
+                if genome.successor_links(genome.links[*index].from_id)
+                               .iter()
+                               .filter(|link| link.enabled)
+                               .count() == 1 {
+                    // If so, we can disable this one
+                    genome.links[*index].enabled = false;
+                }
+            } else {
+                genome.links[*index].enabled = true;
+            }
+        },
+
+        None => ()
+    }
+}
+
+/// Reenable the first gene we can find
+
 
 /// Add a new node to the genome by inserting it in the middle of an existing link between two nodes.
 /// This function takes a set of node innovations that happened in this generation so far as a parameter.
@@ -219,7 +252,7 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
     // Decide whether to create a recurrent or a feed-forward link
     let recurrent = rng.next_f64() < recurrent_link_prob;
 
-    if recurrent { println!("{}", "creating recurrent link"); }
+    //if recurrent { println!("{}", "creating recurrent link"); }
 
     // Randomly select from and to node until they fit our criterion
     let mut from_id = 0;
@@ -286,13 +319,6 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
     };
 
     genome.add_link(link);
-}
-
-/// Toggle the enabled state of a random link
-pub fn toggle_enable<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R) {
-    // Take a random link gene 
-    let gene_indices = genome.links.iter().enumerate().map(|(i, link)| i)
-              .collect::<Vec<usize>>();
 }
 
 pub enum LinkMutation {
