@@ -98,6 +98,51 @@ pub fn compatibility(c: &CompatCoefficients,
 }
 
 impl Genome {
+    pub fn initial_genome(num_inputs: usize, num_outputs: usize) -> Genome {
+        let mut genome = Genome { nodes: vec![], links: vec![] };
+        let mut node_counter = 0;
+        let mut innovation_counter = 0;
+
+        for x in 0..num_inputs {
+            genome.nodes.push(Node { id: node_counter, node_type: NodeType::Input });
+            node_counter += 1;
+        }
+
+        genome.nodes.push(Node { id: node_counter, node_type: NodeType::Bias });
+        node_counter += 1;
+
+        for y in 0..num_outputs {
+            genome.nodes.push(Node { id: node_counter, node_type: NodeType::Output });
+
+            genome.add_link(Link {
+                from_id: num_inputs,
+                to_id: node_counter,
+                enabled: true,
+                innovation: innovation_counter,
+                weight: 0.0,
+                is_recurrent: false,
+            });
+            innovation_counter += 1;
+
+            for x in 0..num_inputs {
+                genome.add_link(Link {
+                    from_id: x,
+                    to_id: node_counter,
+                    enabled: true,
+                    innovation: innovation_counter,
+                    weight: 0.0,
+                    is_recurrent: false,
+                });
+
+                innovation_counter += 1;
+            }
+
+            node_counter += 1;
+        }
+
+        genome
+    }
+
     pub fn assert_integrity(&self) {
         for link in self.links.iter() {
             assert!(self.is_link(link.from_id, link.to_id));
@@ -191,7 +236,7 @@ impl Genome {
     /// Checks if a new link would be considered recurrent in the network.
     /// This allows us to control the frequency with which recurrent loops are added by mutations.
     pub fn is_new_link_recurrent(&self, from_id: NodeId, to_id: NodeId) -> bool {
-        // Starting from `from_id`, try to find `to_id` using depth search.
+        // Starting from `to_id`, try to find `from_id` using depth search.
         // Here, we only use links that are considered feed forward in the network.
 
         let mut visited = BTreeSet::new();
@@ -200,7 +245,7 @@ impl Genome {
         while let Some(node_id) = queue.pop() {
             visited.insert(node_id);
 
-            if node_id == to_id {
+            if node_id == from_id {
                 return true;
             }
 

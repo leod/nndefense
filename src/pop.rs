@@ -1,6 +1,7 @@
 extern crate rand;
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use rand::Rng;
 use genes;
 use mutation;
@@ -16,7 +17,7 @@ pub struct Settings {
 
 pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.3,
-    compat_threshold: 10.0,
+    compat_threshold: 6.0,
     dropoff_age: 15
 };
 
@@ -100,10 +101,6 @@ impl Species {
             }
 
             organism.adj_fitness = organism.fitness / num_organisms as f64;
-
-            if self.age - self.age_of_last_improvement >= dropoff_age {
-                organism.adj_fitness /= 100.0;
-            }
         }
 
         self.organisms.sort_by(
@@ -134,11 +131,12 @@ impl Species {
     /// Each species is assigned a number of expected offspring based on its share of the total fitness pie.
     /// The parameter `skim` is the fractional part left over from previous species' allotting
     pub fn allot_offspring(&mut self,
-                           total_average_adj_fitness: f64,
-                           total_population: usize,
+                           average_adj_fitness: f64,
                            skim: &mut f64) {
-        let expected_offspring = self.average_adj_fitness() / total_average_adj_fitness *
-                                 total_population as f64;
+        /*let expected_offspring = self.average_adj_fitness() / total_average_adj_fitness *
+                                 total_population as f64;*/
+        let sum_adj_fitness = self.organisms.iter().fold(0.0, |x, o| x + o.adj_fitness);
+        let expected_offspring = sum_adj_fitness / average_adj_fitness;
 
         let int_part = expected_offspring.floor() as usize;
         let fract_part = expected_offspring.fract();
@@ -174,18 +172,23 @@ impl Species {
 
                 offspring.push(Organism::new(&new_genome));
             } else {
-                continue; // TODO
-
                 // Random parents
-                let parent_a = &self.organisms[rng.gen_range(0, self.organisms.len())].genome;
-                let parent_b = &self.organisms[rng.gen_range(0, self.organisms.len())].genome;
+                let parent_a = &self.organisms[rng.gen_range(0, self.organisms.len())];
+                let parent_b = &self.organisms[rng.gen_range(0, self.organisms.len())];
 
-                let mut new_genome = mating::multipoint(rng, parent_a, parent_b);
+                let mut new_genome =
+                    if parent_a.fitness >= parent_b.fitness {
+                        mating::multipoint(rng, &parent_a.genome, &parent_b.genome)
+                    } else {
+                        mating::multipoint(rng, &parent_b.genome, &parent_a.genome)
+                    };
 
                 // Mutate the offspring's genome according to some probability,
                 // or if parent_a is the same genome as parent_b
                 if rng.next_f64() < mutation_settings.mutate_after_mating_prob ||
-                   genes::compatibility(&genes::STANDARD_COMPAT_COEFFICIENTS, parent_a, parent_b) == 0.0 {
+                   genes::compatibility(&genes::STANDARD_COMPAT_COEFFICIENTS,
+                                        &parent_a.genome,
+                                        &parent_b.genome) == 0.0 {
                     mutation::mutate(&mut new_genome, mutation_settings, rng, mutation_state);     
                 }
 
@@ -243,10 +246,16 @@ impl Population {
     }
 
     pub fn average_adj_fitness(&self) -> f64 {
-        self.species.iter()
+        /*self.species.iter()
                     .map(|species| species.average_adj_fitness())
                     .fold(0.0, |x,y| x+y)
-        / self.species.len() as f64
+        / self.species.len() as f64*/
+
+        self.species.iter()
+                    .map(|s| s.organisms.iter().map(|o| o.adj_fitness)
+                                               .fold(0.0, |x,y| x+y))
+                    .fold(0.0, |x,y| x+y)
+        / self.num_organisms() as f64
     }
 
     pub fn best_organism(&self) -> Option<&Organism> {
@@ -301,7 +310,7 @@ impl Population {
         let num_species = self.species.len();
         let mut expected_offspring = 0;
         for species in self.species.iter_mut() {
-            species.allot_offspring(total_average_adj_fitness, total_population, &mut skim);
+            species.allot_offspring(average_adj_fitness, &mut skim);
             expected_offspring += species.expected_offspring;
         }
 

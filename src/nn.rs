@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::cell::RefCell;
+use std::cmp;
 use genes;
 
 pub fn sigmoid(input_sum: f64) -> f64 {
@@ -18,6 +19,8 @@ pub struct Node {
     weights: Vec<f64>,
     node_type: genes::NodeType,
 
+    depth: Option<usize>,
+
     active: bool,
     input_sum: f64,
     activation: f64,
@@ -27,6 +30,7 @@ pub struct Node {
 pub struct Network {
     id_to_index: Box<HashMap<genes::NodeId, usize>>,
     nodes: Vec<Node>, 
+    max_depth: usize, // Length of the longest path contained in the network
 }
 
 impl Network {
@@ -56,6 +60,7 @@ impl Network {
                                    .map(|link| link.weight)
                                    .collect(),
                     node_type: node.node_type,
+                    depth: None,
                     active: false,
                     input_sum: 0.0,
                     activation: if node.node_type == genes::NodeType::Bias { 1.0 } else { 0.0 },
@@ -82,10 +87,45 @@ impl Network {
             }
         }
 
-        Network {
+        let mut network = Network {
             id_to_index: id_to_index,
             nodes: nodes,
+            max_depth: 0,
+        };
+
+        network.calc_depths();
+        network
+    }
+
+    /// Maximl number of links from an input to an output node
+    fn calc_depths(&mut self) {
+        /*// Depth search
+
+        let mut visited = BTreeSet::new();
+        let mut queue = self.nodes.iter().enumerate()
+                                         .filter(|(i, node)| node.node_type == genes::NodeType::Input)
+                                         .map(|(i, node)| (i, 0))
+                                         .collect::<Vec<Node>>();
+
+        while let Some(node_index, depth) = queue.pop() {
+            visited.insert(node_index);
+
+            let node = &mut self.nodes[node_index];
+            node.depth = match node.depth {
+                Some(old_depth) => Some(cmp::min(old_depth, depth));
+                None => Some(depth);
+            };
+
+            for link in self.successor_links(node_id) {
+                if visited.contains(&link.to_id) || link.is_recurrent {
+                    continue
+                }
+
+                queue.push(link.to_id);
+            }
         }
+
+        return false;*/
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -151,13 +191,16 @@ impl Network {
                                   let in_active = in_node.active || in_node.node_type == genes::NodeType::Input
                                                                  || in_node.node_type == genes::NodeType::Bias;
 
+                                  if in_active {
+                                      //println!("{} gets {} * {} from {}", node.gene.id, weight, in_node.activation, in_node.gene.id);
+                                  }
+
                                   (active || in_active,
                                    if in_active { input_sum + weight * in_node.activation }
                                    else { input_sum })
                               })
                 };
 
-                //println!("activate {} with {}", self.nodes[node_index].gene.id, input_sum);
 
                 // Update state in array
                 self.nodes[node_index].active = active;
@@ -173,6 +216,7 @@ impl Network {
 
                 if node.active {
                     node.activation = sigmoid(node.input_sum);
+                    //println!("activate {} with {} -> {}", node.gene.id, node.input_sum, node.activation);
                 }
             }
 
