@@ -33,13 +33,13 @@ pub struct Settings {
 pub static STANDARD_SETTINGS: Settings =
     Settings {
         new_node_prob: 0.01,
-        new_link_prob: 0.3,
+        new_link_prob: 0.2,
 
         change_link_weights_prob: 0.8,
         change_link_weights_power: 0.5,
         uniform_perturbation_prob: 0.9,
 
-        recurrent_link_prob: 0.3,
+        recurrent_link_prob: 0.08,
         self_link_prob: 0.5,
 
         toggle_enable_prob: 0.05,
@@ -111,8 +111,8 @@ pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
 
         if rng.next_f64() < settings.change_link_weights_prob {
             let p = 1.0 / (genome.links.len() as f64).sqrt();
-            change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
-            //change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
+            //change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+            change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
         }
     }
 }
@@ -138,9 +138,12 @@ pub fn toggle_enable<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R) {
                                .count() == 1 {
                     // If so, we can disable this one
                     genome.links[*index].enabled = false;
+
+                    //println!("disable link {} from {} to {}", genome.links[*index].innovation, genome.links[*index].from_id, genome.links[*index].to_id);
                 }
             } else {
                 genome.links[*index].enabled = true;
+                //println!("enable link {} from {} to {}", genome.links[*index].innovation, genome.links[*index].from_id, genome.links[*index].to_id);
             }
         },
 
@@ -263,7 +266,7 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
         if recurrent && rng.next_f64() < self_link_prob {
             // Sometimes make a self loop
             from_id = *rng.choose(&hidden_node_ids).unwrap();
-            to_id = to_id 
+            to_id = from_id 
         } else {
             from_id = *rng.choose(&node_ids).unwrap();
             to_id = *rng.choose(&hidden_node_ids).unwrap();

@@ -9,6 +9,10 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::thread;
+use std::sync::Arc;
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
 
 mod genes; 
 mod mutation;
@@ -17,7 +21,7 @@ mod pop;
 mod mating;
 mod exp;
 
-fn to_f(x: bool) -> f64 {
+/*fn to_f(x: bool) -> f64 {
     if x { 1.0 } else { -1.0 }
 }
 
@@ -46,100 +50,81 @@ fn evaluate(organism: &mut pop::Organism, print: bool) {
     };
 
     organism.fitness = fitness;
+} */
+
+fn evaluate(population: &mut pop::Population) {
+    //evaluate_single_threaded(population);
+    evaluate_multi_threaded(population);
+}
+
+fn evaluate_single_threaded(population: &mut pop::Population) {
+    for species in population.species.iter_mut() {
+        for organism in species.organisms.iter_mut() {
+            let fitness = exp::roadgame::evaluate_to_death(&mut organism.network);
+            organism.fitness = fitness;
+        }
+    }
+}
+
+fn evaluate_multi_threaded(population: &mut pop::Population) {
+    let num_threads = 4;
+    let num_population = population.num_organisms();
+
+    let num_tasks_per_thread = num_population / num_threads;
+
+    let mut organisms = vec![];
+
+    for (species_index, species) in population.species.iter().enumerate() {
+        for (organism_index, organism) in species.organisms.iter().enumerate() {
+            organisms.push((species_index, organism_index, organism.clone()));
+        }
+    }
+
+    let (results_send, results_recv): (Sender<(usize, usize, f64)>, Receiver<(usize, usize, f64)>) = channel();
+    let shared_organisms = Arc::new(organisms); 
+    let mut threads = vec![];
+
+    for k in 0..num_threads {
+        let thread_organisms = shared_organisms.clone();
+        let thread_results = results_send.clone();
+
+        threads.push(thread::spawn(move || {
+            let local_organisms = &thread_organisms[num_tasks_per_thread*k..num_tasks_per_thread*(k+1)];
+
+            for &(species_index, organism_index, ref organism) in local_organisms {
+                let mut network = organism.network.clone();
+                let fitness = exp::roadgame::evaluate_to_death(&mut network);
+
+                thread_results.send((species_index, organism_index, fitness)).unwrap();
+            }
+        }));
+    }
+
+    for _ in 0..num_population {
+        let (species_index, organism_index, fitness) = results_recv.recv().unwrap();
+        population.species[species_index].organisms[organism_index].fitness = fitness;
+    }
+
+    for thread in threads.into_iter() {
+        thread.join();
+    }
 }
 
 fn main() {
-    let mut genome: genes::Genome = genes::Genome {
-        /*nodes: vec![genes::Node { id: 0, node_type: genes::NodeType::Input },
-                    genes::Node { id: 1, node_type: genes::NodeType::Input },
-                    genes::Node { id: 5, node_type: genes::NodeType::Hidden },
-                    genes::Node { id: 2, node_type: genes::NodeType::Bias },
-                    genes::Node { id: 3, node_type: genes::NodeType::Output }],
-        links: vec![genes::Link { from_id: 0, to_id: 3, enabled: true, innovation: 0, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 1, to_id: 3, enabled: true, innovation: 1, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 3, enabled: true, innovation: 2, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 0, to_id: 5, enabled: true, innovation: 3, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 1, to_id: 5, enabled: true, innovation: 4, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 5, to_id: 3, enabled: true, innovation: 5, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 5, enabled: true, innovation: 6, weight: 0.0, is_recurrent: false }]*/
-        nodes: vec![genes::Node { id: 0, node_type: genes::NodeType::Input },
-                    genes::Node { id: 1, node_type: genes::NodeType::Input },
-                    genes::Node { id: 2, node_type: genes::NodeType::Bias },
-                    genes::Node { id: 3, node_type: genes::NodeType::Output }],
-        links: vec![genes::Link { from_id: 0, to_id: 3, enabled: true, innovation: 0, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 1, to_id: 3, enabled: true, innovation: 1, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 3, enabled: true, innovation: 2, weight: 0.0, is_recurrent: false }]
-    };
-
-    /*let genome_xor: genes::Genome = genes::Genome {
-        nodes: vec![genes::Node { id: 0, node_type: genes::NodeType::Input },
-                    genes::Node { id: 1, node_type: genes::NodeType::Input },
-                    genes::Node { id: 5, node_type: genes::NodeType::Hidden },
-                    genes::Node { id: 2, node_type: genes::NodeType::Bias },
-                    genes::Node { id: 3, node_type: genes::NodeType::Output }],
-        links: vec![genes::Link { from_id: 0, to_id: 3, enabled: true, innovation: 0, weight: 1.0, is_recurrent: false },
-                    genes::Link { from_id: 1, to_id: 3, enabled: true, innovation: 1, weight: 1.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 3, enabled: true, innovation: 2, weight: 0.0, is_recurrent: false },
-                    genes::Link { from_id: 0, to_id: 5, enabled: true, innovation: 3, weight: 0.5, is_recurrent: false },
-                    genes::Link { from_id: 1, to_id: 5, enabled: true, innovation: 4, weight: 0.5, is_recurrent: false },
-                    genes::Link { from_id: 5, to_id: 3, enabled: true, innovation: 5, weight: -2.0, is_recurrent: false },
-                    genes::Link { from_id: 2, to_id: 5, enabled: true, innovation: 6, weight: 0.0, is_recurrent: false }]
-    };*/
-
-    /*let mut org = pop::Organism::new(&genome_xor);
-    evaluate(&mut org, true);
-    return;*/
-
     let mut i = 0;
     let mut rng = rand::thread_rng();
-    let mut node_counter = 4;
 
-    /*let mut genome2 = genome.clone();
-    mutation::change_link_weights_reset_all(&mut genome2, &mut rng, 1.0);
-    println!("{:?}", &genome2);
-
-    println!("{}", genes::compatibility(&genes::STANDARD_COMPAT_COEFFICIENTS, &genome, &genome2));
-    return;*/
-
-    /*for i in 1..1000 {
-        let mut g = genome.clone(); 
-        let mut state = mutation::State {
-            node_counter: 5,
-            innovation_counter: 5,
-            link_innovations: HashMap::new(),
-            node_innovations: HashMap::new()
-        };
-
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        mutation::mutate(&mut g, &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }, &mut rng, &mut state);
-        //mutation::change_link_weights_standard(&mut g, &mut rng, 1.0, 1.0);
-        g.compile_to_png(Path::new(&format!("networks/dot/{}.dot", i)), Path::new(&format!("networks/{}.png", i)));
-    }
-    return;*/
-
-    let num_threads = 16;
-    let num_population = 1024;
-
+    let num_population = 256;
     let initial_genome = exp::roadgame::initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
                                                               &pop::STANDARD_SETTINGS,
-                                                              &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
-                                                              //&mutation::STANDARD_SETTINGS,
+                                                              //&mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
+                                                              &mutation::STANDARD_SETTINGS,
                                                               &genes::STANDARD_COMPAT_COEFFICIENTS,
                                                               &initial_genome,
                                                               num_population);
-    for species in population.species.iter_mut() {
-        for organism in species.organisms.iter_mut() {
-            //evaluate(organism, false);
-            exp::roadgame::evaluate_to_death(organism);
-        }
-    }
+    evaluate(&mut population);
 
     loop {
         i += 1;
@@ -154,42 +139,20 @@ fn main() {
         println!("");
 
         {
-            let num_tasks_per_thread = num_population / num_threads;
-
-            // because fuck you
-            /*let mut organisms = vec![];
-
-            for species in population.species.iter() {
-                for organism in species.organisms.iter() {
-                    organisms.push(organism.clone());
-                }
-            }
-
-            let threads: Vec<_> = organisms.chunks_mut(num_tasks_per_thread).map(|chunk| {
-                thread::spawn(move || {
-                    for organism in chunk.iter_mut() {
-                        exp::roadgame::evaluate_to_death(organism); 
-                    }
-                })
-            }).collect();
-
-            for thread in threads.into_iter() {
-                thread.join();
-            }*/
-
-            for species in population.species.iter_mut() {
+            evaluate(&mut population);
+            /*for species in population.species.iter_mut() {
                 for organism in species.organisms.iter_mut() {
                     //evaluate(organism, false);
                     exp::roadgame::evaluate_to_death(organism);
                 }
-            }
+            }*/
         }
 
         {
             let mut best = population.best_organism().unwrap().clone();
 
             let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
-            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best).as_bytes());
+            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes());
 
             //evaluate(&mut best, true);
             //println!("genome: {:?}", &best.genome);
@@ -206,10 +169,10 @@ fn main() {
         }
     }
 
-    let mut best = population.best_organism().unwrap().clone();
+    /*let mut best = population.best_organism().unwrap().clone();
     //evaluate(&mut best, true);
     exp::roadgame::evaluate_to_death(&mut best);
     println!("best fitness: {}", best.fitness);
 
-    best.genome.compile_to_png(Path::new("best.dot"), Path::new("best.png"));
+    best.genome.compile_to_png(Path::new("best.dot"), Path::new("best.png"));*/
 }

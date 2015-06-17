@@ -98,7 +98,9 @@ pub fn compatibility(c: &CompatCoefficients,
 }
 
 impl Genome {
-    pub fn initial_genome(num_inputs: usize, num_outputs: usize) -> Genome {
+    pub fn initial_genome(num_inputs: usize, num_outputs: usize, num_connected: usize, bias_connected: bool) -> Genome {
+        assert!(num_connected <= num_inputs);
+
         let mut genome = Genome { nodes: vec![], links: vec![] };
         let mut node_counter = 0;
         let mut innovation_counter = 0;
@@ -114,17 +116,19 @@ impl Genome {
         for y in 0..num_outputs {
             genome.nodes.push(Node { id: node_counter, node_type: NodeType::Output });
 
-            genome.add_link(Link {
-                from_id: num_inputs,
-                to_id: node_counter,
-                enabled: true,
-                innovation: innovation_counter,
-                weight: 0.0,
-                is_recurrent: false,
-            });
-            innovation_counter += 1;
+            if bias_connected {
+                genome.add_link(Link {
+                    from_id: num_inputs,
+                    to_id: node_counter,
+                    enabled: true,
+                    innovation: innovation_counter,
+                    weight: 0.0,
+                    is_recurrent: false,
+                });
+                innovation_counter += 1;
+            }
 
-            for x in 0..num_inputs {
+            for x in 0..num_connected {
                 genome.add_link(Link {
                     from_id: x,
                     to_id: node_counter,
@@ -152,13 +156,19 @@ impl Genome {
 
         for node in self.nodes.iter() { 
             assert!(self.is_node(node.id));
+
+            if node.node_type == NodeType::Input {
+                assert_eq!(self.predecessor_links(node.id).len(), 0);
+            }
         }
 
         {
-            assert!(self.links.len() > 0);
+            //assert!(self.links.len() > 0);
 
-            for i in 0..self.links.len()-1 {
-                assert!(self.links[i].innovation < self.links[i+1].innovation);
+            if self.links.len() > 0 {
+                for i in 0..self.links.len()-1 {
+                    assert!(self.links[i].innovation < self.links[i+1].innovation);
+                }
             }
         }
     }
@@ -272,6 +282,10 @@ impl Genome {
         }
 
         for link in self.links.iter() {
+            if !link.enabled {
+                continue;
+            }
+
             str.push_str(&link.from_id.to_string());
             str.push_str(" -> ");
             str.push_str(&link.to_id.to_string());

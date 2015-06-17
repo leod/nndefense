@@ -79,7 +79,16 @@ fn network_input(state: &GameState, network: &mut nn::Network) -> Option<MoveInp
 
     for y in 0..road_height {
         for x in 0..road_width {
-            let value = if state.road[x][y] { 1.0 } else { -1.0 };
+            let value = if state.road[x][y] {
+                1.0 
+            } else { 
+                if y == 0 && x == state.player_x {
+                    0.0
+                } else {
+                    -1.0
+                }
+            };
+
             input.push((i, value));
 
             i += 1;
@@ -88,8 +97,8 @@ fn network_input(state: &GameState, network: &mut nn::Network) -> Option<MoveInp
 
     //let x_value = state.player_x as f64 - 1.0;
     //let x_value = if state.player_x == 0 { -1.0 } else { 1.0 };
-    let x_value = state.player_x as f64 / (road_width-1) as f64 * 2.0 - 1.0;
-    input.push((i, x_value));
+    //let x_value = state.player_x as f64 / (road_width-1) as f64 * 2.0 - 1.0;
+    //input.push((i, x_value));
 
     network.set_input(&input);
 
@@ -130,7 +139,7 @@ fn state_to_string(state: &GameState) -> String {
 }
 
 pub fn initial_genome() -> genes::Genome {
-    genes::Genome::initial_genome(road_width * road_height + 1, 1)
+    genes::Genome::initial_genome(road_width * road_height, 1, 0, true)
 }
 
 fn initial_state() -> GameState {
@@ -143,14 +152,14 @@ fn initial_state() -> GameState {
     }
 }
 
-pub fn evaluate(organism: &mut pop::Organism) {
+pub fn evaluate(network: &mut nn::Network) -> f64 {
     let max_steps = 2000;
     let mut num_steps = 0;
     let mut state = initial_state();
-    organism.network.flush();
+    network.flush();
 
     while num_steps < max_steps {
-        let input = network_input(&state, &mut organism.network);
+        let input = network_input(&state, network);
         road_game_step(&mut state, input);
         num_steps += 1;
         //println!("{}", state_to_string(&state));
@@ -158,20 +167,20 @@ pub fn evaluate(organism: &mut pop::Organism) {
     }
 
     //organism.fitness = ((max_steps - state.hits) as f64 / max_steps as f64).sqrt();
-    organism.fitness = ((max_steps - state.hits) as f64).powf(2.0);
+    ((max_steps - state.hits) as f64).powf(2.0)
 }
 
-pub fn evaluate_to_death(organism: &mut pop::Organism) {
+pub fn evaluate_to_death(network: &mut nn::Network) -> f64 {
     let max_steps = 100;
     let num_runs = 500;
     let mut num_steps = 0;
 
     for _ in 0..num_runs {
         let mut state = initial_state();
-        organism.network.flush();
+        network.flush();
 
         for _ in 0..max_steps {
-            let input = network_input(&state, &mut organism.network);
+            let input = network_input(&state, network);
             road_game_step(&mut state, input);
             num_steps += 1;
             if state.hit_now {
@@ -181,23 +190,23 @@ pub fn evaluate_to_death(organism: &mut pop::Organism) {
     }
 
     //organism.fitness = ((max_steps - state.hits) as f64 / max_steps as f64).sqrt();
-    organism.fitness = (num_steps as f64 / num_runs as f64).powf(2.0);
+    (num_steps as f64 / num_runs as f64).powf(2.0)
 }
 
-pub fn evaluate_to_string(organism: &mut pop::Organism) -> String {
+pub fn evaluate_to_string(network: &mut nn::Network) -> String {
     let max_steps = 2000;
     let mut num_steps = 0;
     let empty_road = [false,false,false];
     let mut state = initial_state();
     let mut str = String::new();
 
-    organism.network.flush();
+    network.flush();
 
     while num_steps < max_steps {
         str.push_str(&state_to_string(&state));
         str.push_str(&"---\n");
 
-        let input = network_input(&state, &mut organism.network);
+        let input = network_input(&state, network);
         road_game_step(&mut state, input);
         num_steps += 1;
     }
@@ -205,7 +214,7 @@ pub fn evaluate_to_string(organism: &mut pop::Organism) -> String {
     format!("Hits: {}\n", state.hits) + &str
 }
 
-pub fn evaluate_to_death_to_string(organism: &mut pop::Organism) -> String {
+pub fn evaluate_to_death_to_string(network: &mut nn::Network) -> String {
     let max_steps = 100;
     let num_runs = 500;
     let mut num_steps = 0;
@@ -213,24 +222,23 @@ pub fn evaluate_to_death_to_string(organism: &mut pop::Organism) -> String {
     let mut state = initial_state();
     let mut str = String::new();
 
-    organism.network.flush();
+    network.flush();
 
     while num_steps < max_steps {
-
-        let input = network_input(&state, &mut organism.network);
+        let input = network_input(&state, network);
         road_game_step(&mut state, input);
         num_steps += 1;
     }
 
     for _ in 0..num_runs {
         let mut state = initial_state();
-        organism.network.flush();
+        network.flush();
 
         for _ in 0..max_steps {
             str.push_str(&state_to_string(&state));
             str.push_str(&"---\n");
 
-            let input = network_input(&state, &mut organism.network);
+            let input = network_input(&state, network);
             road_game_step(&mut state, input);
             num_steps += 1;
             if state.hit_now {

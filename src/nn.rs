@@ -226,7 +226,7 @@ impl Network {
         }
 
         if !self.are_outputs_activated() {
-            println!("couldn't activate all outputs in time");
+            //println!("couldn't activate all outputs in time");
         }
     }
 }

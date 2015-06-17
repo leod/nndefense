@@ -13,6 +13,9 @@ pub fn multipoint<R: rand::Rng>(rng: &mut R, genome_a: &genes::Genome, genome_b:
 
     let mut offspring = genes::Genome { nodes: vec![], links: vec![] };
 
+    // Add all nodes from the better genome so we don't lose any inputs
+    offspring.nodes = genome_a.nodes.clone();
+
     while i < genome_a.links.len() {
         let link_a = &genome_a.links[i];
 
