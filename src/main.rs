@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate rand;
 
 use std::collections::HashMap;
@@ -6,6 +8,7 @@ use std::io;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
+use std::thread;
 
 mod genes; 
 mod mutation;
@@ -119,15 +122,18 @@ fn main() {
     }
     return;*/
 
+    let num_threads = 16;
+    let num_population = 1024;
+
     let initial_genome = exp::roadgame::initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
                                                               &pop::STANDARD_SETTINGS,
-                                                              //&mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
-                                                              &mutation::STANDARD_SETTINGS,
+                                                              &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
+                                                              //&mutation::STANDARD_SETTINGS,
                                                               &genes::STANDARD_COMPAT_COEFFICIENTS,
                                                               &initial_genome,
-                                                              1000);
+                                                              num_population);
     for species in population.species.iter_mut() {
         for organism in species.organisms.iter_mut() {
             //evaluate(organism, false);
@@ -147,10 +153,35 @@ fn main() {
         population.epoch(&mut rng);
         println!("");
 
-        for species in population.species.iter_mut() {
-            for organism in species.organisms.iter_mut() {
-                //evaluate(organism, false);
-                exp::roadgame::evaluate_to_death(organism);
+        {
+            let num_tasks_per_thread = num_population / num_threads;
+
+            // because fuck you
+            /*let mut organisms = vec![];
+
+            for species in population.species.iter() {
+                for organism in species.organisms.iter() {
+                    organisms.push(organism.clone());
+                }
+            }
+
+            let threads: Vec<_> = organisms.chunks_mut(num_tasks_per_thread).map(|chunk| {
+                thread::spawn(move || {
+                    for organism in chunk.iter_mut() {
+                        exp::roadgame::evaluate_to_death(organism); 
+                    }
+                })
+            }).collect();
+
+            for thread in threads.into_iter() {
+                thread.join();
+            }*/
+
+            for species in population.species.iter_mut() {
+                for organism in species.organisms.iter_mut() {
+                    //evaluate(organism, false);
+                    exp::roadgame::evaluate_to_death(organism);
+                }
             }
         }
 
@@ -169,25 +200,11 @@ fn main() {
 
 
             /*for (j, species) in population.species.iter().enumerate() {
-                let mut best = species.best_organism().clone();  
-                /*for (k, organism) in species.organisms.iter().enumerate() {
-                    organism.genome.compile_to_png(Path::new(&format!("networks/dot/{}_{}_{}.dot", i, j, k)),
-                                                   Path::new(&format!("networks/{}_{}_{}_{}.png", i, j, k,
-                                                                      organism.fitness)));
-                }*/
-
-            }
-            //return;*/
+                species.best_genome.compile_to_png(Path::new(&format!("networks/dot/{}_{}.dot", i, j)),
+                                                   Path::new(&format!("networks/{}_{}.png", i, j)));
+            }*/
         }
-
-
     }
-
-    /*for species in population.species.iter_mut() {
-        for organism in species.organisms.iter_mut() {
-            evaluate(organism, false);
-        }
-    }*/
 
     let mut best = population.best_organism().unwrap().clone();
     //evaluate(&mut best, true);
