@@ -13,12 +13,14 @@ pub struct Settings {
     pub survival_threshold: f64,
     pub compat_threshold: f64,
     pub dropoff_age: usize,
+    pub target_num_species: usize,
 }
 
 pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.3,
     compat_threshold: 6.0,
-    dropoff_age: 15
+    dropoff_age: 15,
+    target_num_species: 10
 };
 
 #[derive(Clone)]
@@ -53,6 +55,9 @@ pub struct Species {
     age: usize,
     age_of_last_improvement: usize,
     highest_fitness: f64, // of all time
+
+    // This is the genome that is used to compute the compatibility of organisms to this species
+    pub best_genome: genes::Genome,
 }
 
 pub struct Population {
@@ -64,18 +69,22 @@ pub struct Population {
     innovation_counter: usize,
     pub species: Vec<Species>,
 
+    generation: usize,
+
     highest_fitness: f64, // Over all time
     time_since_last_improvement: usize,
 }
 
 impl Species {
     pub fn new(organisms: Vec<Organism>) -> Species {
+        let best_genome = organisms[0].genome.clone();
         Species {
             organisms: organisms,
             expected_offspring: 0,
             age: 0,
             age_of_last_improvement: 0,
             highest_fitness: 0.0,
+            best_genome: best_genome,
         }
     }
 
@@ -84,7 +93,7 @@ impl Species {
             self.organisms.len() as f64
     }
 
-    pub fn best_organism(&self) -> &Organism {
+    fn best_organism(&self) -> &Organism {
         return &self.organisms[0];
     }
 
@@ -112,6 +121,8 @@ impl Species {
             self.age_of_last_improvement = self.age;
             self.highest_fitness = self.best_organism().fitness;
         }
+
+        self.best_genome = self.best_organism().genome.clone();
     }
 
     /// Before reproducing, delete the lowest performing members of the species -
@@ -161,7 +172,8 @@ impl Species {
         // Create as many organisms as we are allotted
         let mut offspring = Vec::<Organism>::new();
 
-        while offspring.len() < self.expected_offspring - 1 { // HACK: Leave room for the champ
+        offspring.push(Organism::new(&self.best_genome));
+        while offspring.len() < self.expected_offspring { // HACK: Leave room for the champ
             if rng.next_f64() < mutation_settings.mutate_only_prob {
                 // Pick one organism and just mutate it and that's the new offspring
                 let organism_index = rng.gen_range(0, self.organisms.len());
@@ -195,6 +207,8 @@ impl Species {
                 offspring.push(Organism::new(&new_genome));
             }
         }
+
+        assert_eq!(offspring.len(), self.expected_offspring);
 
         return offspring; 
     }
@@ -236,6 +250,7 @@ impl Population {
             node_counter: genome.nodes.iter().map(|node| node.id).max().unwrap() + 1,
             innovation_counter: max_innovation + 1,
             species: vec![species],
+            generation: 0,
             highest_fitness: 0.0,
             time_since_last_improvement: 0,
         }
@@ -280,7 +295,7 @@ impl Population {
 
         for i in 0..self.species.len() {
             if genes::compatibility(&self.compat_coefficients,
-                                    &self.species[i].best_organism().genome,
+                                    &self.species[i].best_genome,
                                     &organism.genome) < self.settings.compat_threshold {
                 self.species[i].organisms.push(organism);
                 return;
@@ -355,6 +370,19 @@ impl Population {
         assert!(self.species.len() > 0);
         assert!(total_population > 0);
 
+        if self.generation > 0 {
+            if self.species.len() < self.settings.target_num_species {
+                self.settings.compat_threshold -= 0.3;
+            }
+            if self.species.len() > self.settings.target_num_species {
+                self.settings.compat_threshold += 0.3;
+            }
+
+            if self.settings.compat_threshold < 0.3 {
+                self.settings.compat_threshold = 0.3;
+            }
+        }
+
         for species in self.species.iter_mut() {
             species.prepare_for_epoch(self.settings.dropoff_age);
         }
@@ -377,10 +405,9 @@ impl Population {
 
         println!("Highest fitness: {}, time since last improvement: {}",
                  self.highest_fitness, self.time_since_last_improvement);
+        println!("Num species: {}, threshold: {}", self.species.len(), self.settings.compat_threshold);
         
         // Only allow the elite of each species to reproduce
-        self.species.retain(|species| species.expected_offspring > 0);
-
         for species in self.species.iter_mut() {
             species.prune_to_elite(self.settings.survival_threshold);
         }
@@ -394,6 +421,7 @@ impl Population {
             node_innovations: mutation::NewNodeInnovations::new()
         };
 
+        // Reproduce
         for species in self.species.iter() {
             if species.expected_offspring > 0 {
                 offspring.extend(species.reproduce(&self.mutation_settings, rng, &mut mutation_state));
@@ -404,7 +432,7 @@ impl Population {
         self.innovation_counter = mutation_state.innovation_counter;
 
         for species in self.species.iter_mut() {
-            species.prune_to_champ();
+            species.organisms.clear(); 
         }
 
         for organism in offspring.iter() {
@@ -417,9 +445,11 @@ impl Population {
                 println!("{}", "EMPTY SPECIES!");
             }
         }
+        self.species.retain(|species| species.organisms.len() > 0);
 
-        //self.species.retain(|species| species.organisms.len() > 0 && species.expected_offspring > 0);
-
+        // Check that we have the same number of organisms as before this epoch
         assert_eq!(self.species.iter().map(|species| species.organisms.len()).fold(0, |x,y| x+y), total_population);
+
+        self.generation += 1;
     }
 }
