@@ -185,8 +185,14 @@ impl Species {
                 offspring.push(Organism::new(&new_genome));
             } else {
                 // Random parents
-                let parent_a = &self.organisms[rng.gen_range(0, self.organisms.len())];
-                let parent_b = &self.organisms[rng.gen_range(0, self.organisms.len())];
+                let (parent_a, parent_b) = if rng.next_f64() < mutation_settings.interspecies_mating_prob {
+                    // TODO: interspecies mating
+                    (&self.organisms[rng.gen_range(0, self.organisms.len())],
+                     &self.organisms[rng.gen_range(0, self.organisms.len())])
+                } else {
+                    (&self.organisms[rng.gen_range(0, self.organisms.len())],
+                     &self.organisms[rng.gen_range(0, self.organisms.len())])
+                };
 
                 let mut new_genome =
                     if parent_a.fitness >= parent_b.fitness {
