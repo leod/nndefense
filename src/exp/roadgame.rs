@@ -2,14 +2,13 @@ extern crate rand;
 
 use rand::Rng;
 use genes;
-use pop;
 use nn;
 
-const road_width: usize = 3; 
-const road_height: usize = 4;
+const ROAD_WIDTH: usize = 3; 
+const ROAD_HEIGHT: usize = 4;
 
 struct GameState {
-    road: [[bool; road_height]; road_width],
+    road: [[bool; ROAD_HEIGHT]; ROAD_WIDTH],
     player_x: usize,
     hits: usize,
     hit_now: bool,
@@ -23,12 +22,12 @@ enum MoveInput {
 fn road_game_step(state: &mut GameState, input: Option<MoveInput>) {
     match input {
         Some(MoveInput::Left) => if state.player_x > 0 { state.player_x -= 1; },
-        Some(MoveInput::Right) => if state.player_x < road_width-1 { state.player_x += 1; },
+        Some(MoveInput::Right) => if state.player_x < ROAD_WIDTH-1 { state.player_x += 1; },
         None => ()
     }
 
-    for y in 0..road_height-1 {
-        for x in 0..road_width {
+    for y in 0..ROAD_HEIGHT-1 {
+        for x in 0..ROAD_WIDTH {
             state.road[x][y] = state.road[x][y+1];
         }
     }
@@ -43,32 +42,32 @@ fn road_game_step(state: &mut GameState, input: Option<MoveInput>) {
     // Spawn new objects at the top
     let mut rng = rand::thread_rng();
     let mut num_new = 0;
-    for x in 0..road_width {
+    for x in 0..ROAD_WIDTH {
         if rng.next_f64() < 0.3 && num_new < 2 {
-            state.road[x][road_height-1] = true;
+            state.road[x][ROAD_HEIGHT-1] = true;
 
             // Try to prevent some unwinnable situations
-            if (num_new == 1) {
+            if num_new == 1 {
                 let mut num_next_line = 0;
                 let mut one_different = false;
-                for x2 in 0..road_width {
-                    if state.road[x2][road_height-2] {
+                for x2 in 0..ROAD_WIDTH {
+                    if state.road[x2][ROAD_HEIGHT-2] {
                         num_next_line += 1;
                     }
-                    if state.road[x2][road_height-2] != state.road[x2][road_height-1] {
+                    if state.road[x2][ROAD_HEIGHT-2] != state.road[x2][ROAD_HEIGHT-1] {
                         one_different = true;
                     }
                 }
 
-                if (num_next_line > 1 && one_different) {
-                    state.road[x][road_height-1] = false;
+                if num_next_line > 1 && one_different {
+                    state.road[x][ROAD_HEIGHT-1] = false;
                     num_new -= 1;
                 }
             }
 
             num_new += 1;
         } else {
-            state.road[x][road_height-1] = false;
+            state.road[x][ROAD_HEIGHT-1] = false;
         }
     }
 }
@@ -77,8 +76,8 @@ fn network_input(state: &GameState, network: &mut nn::Network) -> Option<MoveInp
     let mut input = Vec::new();
     let mut i = 0;
 
-    for y in 0..road_height {
-        for x in 0..road_width {
+    for y in 0..ROAD_HEIGHT {
+        for x in 0..ROAD_WIDTH {
             let value = if state.road[x][y] {
                 1.0 
             } else { 
@@ -97,12 +96,12 @@ fn network_input(state: &GameState, network: &mut nn::Network) -> Option<MoveInp
 
     //let x_value = state.player_x as f64 - 1.0;
     //let x_value = if state.player_x == 0 { -1.0 } else { 1.0 };
-    //let x_value = state.player_x as f64 / (road_width-1) as f64 * 2.0 - 1.0;
+    //let x_value = state.player_x as f64 / (ROAD_WIDTH-1) as f64 * 2.0 - 1.0;
     //input.push((i, x_value));
 
     network.set_input(&input);
 
-    for i in 1..10 {
+    for _ in 1..10 {
         network.activate();
     }
 
@@ -120,8 +119,8 @@ fn network_input(state: &GameState, network: &mut nn::Network) -> Option<MoveInp
 fn state_to_string(state: &GameState) -> String {
     let mut str = String::new();
 
-    for y in (0..road_height).rev() {
-        for x in 0..road_width {
+    for y in (0..ROAD_HEIGHT).rev() {
+        for x in 0..ROAD_WIDTH {
             let c = if y == 0 && x == state.player_x { 
                 if state.hit_now { 'H' } else { 'X' }
             } else if state.road[x][y] {
@@ -139,7 +138,7 @@ fn state_to_string(state: &GameState) -> String {
 }
 
 pub fn initial_genome() -> genes::Genome {
-    genes::Genome::initial_genome(road_width * road_height, 1, 0, true)
+    genes::Genome::initial_genome(ROAD_WIDTH * ROAD_HEIGHT, 1, 0, true)
 }
 
 fn initial_state() -> GameState {
@@ -162,11 +161,8 @@ pub fn evaluate(network: &mut nn::Network) -> f64 {
         let input = network_input(&state, network);
         road_game_step(&mut state, input);
         num_steps += 1;
-        //println!("{}", state_to_string(&state));
-        //println!("----------------");
     }
 
-    //organism.fitness = ((max_steps - state.hits) as f64 / max_steps as f64).sqrt();
     ((max_steps - state.hits) as f64).powf(2.0)
 }
 
@@ -189,14 +185,13 @@ pub fn evaluate_to_death(network: &mut nn::Network) -> f64 {
         }
     }
 
-    //organism.fitness = ((max_steps - state.hits) as f64 / max_steps as f64).sqrt();
     (num_steps as f64 / num_runs as f64).powf(2.0)
 }
 
 pub fn evaluate_to_string(network: &mut nn::Network) -> String {
     let max_steps = 2000;
+
     let mut num_steps = 0;
-    let empty_road = [false,false,false];
     let mut state = initial_state();
     let mut str = String::new();
 
@@ -217,18 +212,11 @@ pub fn evaluate_to_string(network: &mut nn::Network) -> String {
 pub fn evaluate_to_death_to_string(network: &mut nn::Network) -> String {
     let max_steps = 100;
     let num_runs = 500;
+
     let mut num_steps = 0;
-    let empty_road = [false,false,false];
-    let mut state = initial_state();
     let mut str = String::new();
 
     network.flush();
-
-    while num_steps < max_steps {
-        let input = network_input(&state, network);
-        road_game_step(&mut state, input);
-        num_steps += 1;
-    }
 
     for _ in 0..num_runs {
         let mut state = initial_state();

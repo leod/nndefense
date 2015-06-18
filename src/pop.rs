@@ -1,7 +1,6 @@
 extern crate rand;
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use rand::Rng;
 use genes;
 use mutation;
@@ -134,10 +133,10 @@ impl Species {
         self.organisms.truncate(num_parents);
     }
 
-    /// Only keep the best organism
+    /*/// Only keep the best organism
     pub fn prune_to_champ(&mut self) {
         self.organisms.truncate(1);
-    }
+    }*/
 
     /// Each species is assigned a number of expected offspring based on its share of the total fitness pie.
     /// The parameter `skim` is the fractional part left over from previous species' allotting
@@ -231,7 +230,7 @@ impl Population {
 
         let mut organisms = Vec::<Organism>::new();
 
-        for i in 0..total_population {
+        for _ in 0..total_population {
             // Generate completely random weights for each organism
             let mut new_genome = genome.clone();
             mutation::change_link_weights_reset_all(&mut new_genome, rng, 1.0);
@@ -328,8 +327,8 @@ impl Population {
         // we wouldn't necessarily reach `total_population` again. For this reason, we carry around
         // a `skim` that tells us how much fractional part we have left over.
         let mut skim: f64 = 0.0;
-        let num_species = self.species.len();
         let mut expected_offspring = 0;
+
         for species in self.species.iter_mut() {
             species.allot_offspring(average_adj_fitness, &mut skim);
             expected_offspring += species.expected_offspring;
@@ -340,13 +339,6 @@ impl Population {
                      species.age, species.age_of_last_improvement,
                      species.organisms.len(), species.average_adj_fitness(), species.expected_offspring,
                      species.organisms.iter().map(|o| o.genome.nodes.len() as f64).fold(0.0, |x,y| x+y) / species.organisms.len() as f64, species.best_organism().fitness);
-            /*println!("{:?}", species.organisms.iter().map(|o|
-                                                   o.adj_fitness).collect::<Vec<f64>>());
-            println!("{:?}", species.organisms.iter().map(|o|
-                                                   genes::compatibility(&self.compat_coefficients,
-                                                                        &species.best_organism().genome,
-                                                                        &o.genome)).collect::<Vec<f64>>());*/
-
         }
 
         // We might still not have reached `total_population`, give the rest to the best species
@@ -401,7 +393,7 @@ impl Population {
 
             //assert!(self.highest_fitness <= best_fitness);
 
-            if (self.highest_fitness >= best_fitness) {
+            if self.highest_fitness >= best_fitness {
                 self.time_since_last_improvement += 1;
             } else {
                 self.time_since_last_improvement = 0;
