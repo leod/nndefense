@@ -114,7 +114,7 @@ fn main() {
     let mut i = 0;
     let mut rng = rand::thread_rng();
 
-    let num_population = 256;
+    let num_population = 1024;
     let initial_genome = exp::roadgame::initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,

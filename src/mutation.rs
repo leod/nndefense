@@ -110,9 +110,8 @@ pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
         }
 
         if rng.next_f64() < settings.change_link_weights_prob {
-            let p = 1.0 / (genome.links.len() as f64).sqrt();
-            //change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
-            change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
+            change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+            //change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
         }
     }
 }
@@ -135,7 +134,7 @@ pub fn toggle_enable<R: rand::Rng>(genome: &mut genes::Genome, rng: &mut R) {
                 if genome.successor_links(genome.links[*index].from_id)
                                .iter()
                                .filter(|link| link.enabled)
-                               .count() == 1 {
+                               .count() > 1 {
                     // If so, we can disable this one
                     genome.links[*index].enabled = false;
 

@@ -20,7 +20,7 @@ pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.3,
     compat_threshold: 6.0,
     dropoff_age: 15,
-    target_num_species: 10
+    target_num_species: 20
 };
 
 #[derive(Clone)]
