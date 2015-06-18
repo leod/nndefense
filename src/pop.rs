@@ -19,7 +19,7 @@ pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.3,
     compat_threshold: 6.0,
     dropoff_age: 15,
-    target_num_species: 20
+    target_num_species: 10
 };
 
 #[derive(Clone)]
@@ -49,14 +49,20 @@ impl Organism {
 pub struct Species {
     pub organisms: Vec<Organism>,
 
+    id: usize, // For identification by the user
+
     expected_offspring: usize,
 
     age: usize,
-    age_of_last_improvement: usize,
-    highest_fitness: f64, // of all time
+    highest_fitness: f64, // Over all time
+    time_since_last_improvement: usize,
 
-    // This is the genome that is used to compute the compatibility of organisms to this species
+    // Used to compute the compatibility of organisms to this species
     pub best_genome: genes::Genome,
+
+    // Can be changed to give more offspring to the best genome.
+    // For all copies after the first one, the weights are mutated.
+    best_offspring: usize,
 }
 
 pub struct Population {
@@ -64,26 +70,29 @@ pub struct Population {
     mutation_settings: mutation::Settings,
     compat_coefficients: genes::CompatCoefficients,
 
+    species_counter: usize,
     node_counter: usize,
     innovation_counter: usize,
+
     pub species: Vec<Species>,
 
     generation: usize,
-
     highest_fitness: f64, // Over all time
-    time_since_last_improvement: usize,
+    time_since_last_improvement: usize, // Used to detect stagnation
 }
 
 impl Species {
-    pub fn new(organisms: Vec<Organism>) -> Species {
+    pub fn new(id: usize, organisms: Vec<Organism>) -> Species {
         let best_genome = organisms[0].genome.clone();
         Species {
+            id: id,
             organisms: organisms,
             expected_offspring: 0,
             age: 0,
-            age_of_last_improvement: 0,
+            time_since_last_improvement: 0,
             highest_fitness: 0.0,
             best_genome: best_genome,
+            best_offspring: 0,
         }
     }
 
@@ -100,6 +109,14 @@ impl Species {
     /// Then, the organisms of the species are sorted by their adjusted fitness.
     pub fn prepare_for_epoch(&mut self, dropoff_age: usize) {
         let num_organisms = self.organisms.len();
+        assert!(num_organisms > 0);
+
+        // Penalty for species that don't improve for a longer time
+        let penalize = self.time_since_last_improvement > dropoff_age;
+
+        if penalize {
+            println!("Penalizing species {}", self.id);
+        }
 
         for organism in self.organisms.iter_mut() {
             assert!(organism.fitness >= 0.0);
@@ -108,7 +125,12 @@ impl Species {
                 organism.fitness = 0.001;
             }
 
+            // Fitness sharing
             organism.adj_fitness = organism.fitness / num_organisms as f64;
+
+            if penalize {
+                organism.adj_fitness *= 0.01;
+            }
         }
 
         self.organisms.sort_by(
@@ -117,11 +139,14 @@ impl Species {
         self.age += 1;
 
         if self.best_organism().fitness > self.highest_fitness {
-            self.age_of_last_improvement = self.age;
+            self.time_since_last_improvement = 0;
             self.highest_fitness = self.best_organism().fitness;
+        } else {
+            self.time_since_last_improvement += 1;
         }
 
         self.best_genome = self.best_organism().genome.clone();
+        self.best_offspring = 1; // By default, give at least 1 offspring to the best genome
     }
 
     /// Before reproducing, delete the lowest performing members of the species -
@@ -133,18 +158,11 @@ impl Species {
         self.organisms.truncate(num_parents);
     }
 
-    /*/// Only keep the best organism
-    pub fn prune_to_champ(&mut self) {
-        self.organisms.truncate(1);
-    }*/
-
     /// Each species is assigned a number of expected offspring based on its share of the total fitness pie.
     /// The parameter `skim` is the fractional part left over from previous species' allotting
     pub fn allot_offspring(&mut self,
                            average_adj_fitness: f64,
                            skim: &mut f64) {
-        /*let expected_offspring = self.average_adj_fitness() / total_average_adj_fitness *
-                                 total_population as f64;*/
         let sum_adj_fitness = self.organisms.iter().fold(0.0, |x, o| x + o.adj_fitness);
         let expected_offspring = sum_adj_fitness / average_adj_fitness;
 
@@ -171,7 +189,21 @@ impl Species {
         // Create as many organisms as we are allotted
         let mut offspring = Vec::<Organism>::new();
 
-        offspring.push(Organism::new(&self.best_genome));
+        // Give offspring to the best genome
+        assert!(self.best_offspring > 0);
+
+        for i in 0..self.best_offspring {
+            // Only one unmodified copy
+            if i > 0 {
+                let mut genome = self.best_genome.clone();
+                mutation::change_link_weights_standard(&mut genome, rng, 1.0,
+                                                       mutation_settings.change_link_weights_power);
+                offspring.push(Organism::new(&genome));
+            } else {
+                offspring.push(Organism::new(&self.best_genome));
+            }
+        }
+
         while offspring.len() < self.expected_offspring { // HACK: Leave room for the champ
             if rng.next_f64() < mutation_settings.mutate_only_prob {
                 // Pick one organism and just mutate it and that's the new offspring
@@ -239,7 +271,7 @@ impl Population {
         }
 
         // Start with one species containing all organisms
-        let species = Species::new(organisms);
+        let species = Species::new(0, organisms);
 
         let mut max_innovation = 0;
         for link in genome.links.iter() {
@@ -252,9 +284,13 @@ impl Population {
             settings: settings.clone(),
             mutation_settings: mutation_settings.clone(),
             compat_coefficients: compat_coefficients.clone(),
+
             node_counter: genome.nodes.iter().map(|node| node.id).max().unwrap() + 1,
             innovation_counter: max_innovation + 1,
+            species_counter: 1,
+
             species: vec![species],
+
             generation: 0,
             highest_fitness: 0.0,
             time_since_last_improvement: 0,
@@ -308,14 +344,60 @@ impl Population {
         }
 
         // No matching species found - create a new one
-        println!("Creating new species");
-        self.species.push(Species::new(vec![organism]));
+        println!("Creating species {}", self.species_counter);
+
+        self.species.push(Species::new(self.species_counter, vec![organism]));
+        self.species_counter += 1;
     }
 
     /// Allot number of offspring for each species.
     fn allot_offspring(&mut self) {
         let total_population = self.num_organisms();
 
+        // If we have population-wide stagnation, give all the offspring to the best two species
+        if self.time_since_last_improvement >= self.settings.dropoff_age {
+            println!("No improvement for {} epochs, keeping only the first two species",
+                     self.time_since_last_improvement);
+
+            self.time_since_last_improvement = 0;
+
+            // Create a sorted list of species indicies, sort by unmodified fitness of best organism
+            let mut species_sorted = (0..self.species.len()).collect::<Vec<_>>();
+            species_sorted.sort_by(
+                |a, b| self.species[*b].best_organism().fitness
+                           .partial_cmp(&self.species[*a].best_organism().fitness)
+                           .unwrap_or(Ordering::Equal));
+
+            let half_population1 = total_population / 2;
+            let half_population2 = total_population - half_population1;
+
+            let best_index = species_sorted[0];
+
+            for i in 0..self.species.len() {
+                self.species[i].expected_offspring = 0;
+            }
+
+            if self.species.len() > 1 {
+                let next_index = species_sorted[1];
+
+                self.species[best_index].expected_offspring = half_population1;
+                self.species[next_index].expected_offspring = half_population2;
+
+                self.species[best_index].best_offspring = half_population1;
+                self.species[next_index].best_offspring = half_population2;
+
+                self.species[best_index].time_since_last_improvement = 0;
+                self.species[next_index].time_since_last_improvement = 0;
+            } else {
+                self.species[best_index].expected_offspring = half_population1 + half_population2;
+                self.species[best_index].best_offspring = half_population1 + half_population2;
+                self.species[best_index].time_since_last_improvement = 0;
+            }
+
+            return;
+        }
+
+        // Otherwise, distribute offspring among species according to the adjusted fitness
         let average_adj_fitness = self.average_adj_fitness();
         println!("Average fitness: {}", average_adj_fitness);
 
@@ -334,12 +416,12 @@ impl Population {
             expected_offspring += species.expected_offspring;
         }
 
-        for species in self.species.iter() {
+        /*for species in self.species.iter() {
             println!("S({}:{}) size: {}, fit: {}, new: {}, nodes: {}, best: {}",
-                     species.age, species.age_of_last_improvement,
+                     species.age, species.time_since_last_improvement,
                      species.organisms.len(), species.average_adj_fitness(), species.expected_offspring,
                      species.organisms.iter().map(|o| o.genome.nodes.len() as f64).fold(0.0, |x,y| x+y) / species.organisms.len() as f64, species.best_organism().fitness);
-        }
+        }*/
 
         // We might still not have reached `total_population`, give the rest to the best species
         assert!(expected_offspring <= total_population);
@@ -368,6 +450,8 @@ impl Population {
         assert!(self.species.len() > 0);
         assert!(total_population > 0);
 
+        // Adjust the threshold by which we consider two organisms to be in the same species.
+        // We try to keep the number of species constant (though this does not always seem to work).
         if self.generation > 0 {
             if self.species.len() < self.settings.target_num_species {
                 self.settings.compat_threshold -= 0.3;
@@ -381,12 +465,6 @@ impl Population {
             }
         }
 
-        for species in self.species.iter_mut() {
-            species.prepare_for_epoch(self.settings.dropoff_age);
-        }
-
-        self.allot_offspring();
-
         // Check for stagnation
         {
             let best_fitness = self.best_organism().unwrap().fitness;
@@ -399,6 +477,38 @@ impl Population {
                 self.time_since_last_improvement = 0;
                 self.highest_fitness = best_fitness;
             }
+        }
+
+        for species in self.species.iter_mut() {
+            species.prepare_for_epoch(self.settings.dropoff_age);
+        }
+
+        self.allot_offspring();
+
+        // Debug species
+        {
+            let mut species_sorted = (0..self.species.len()).collect::<Vec<_>>();
+            species_sorted.sort_by(
+                |a, b| self.species[*b].best_organism().fitness
+                           .partial_cmp(&self.species[*a].best_organism().fitness)
+                           .unwrap_or(Ordering::Equal));
+
+            for i in species_sorted.iter() {
+                let s = &self.species[*i];
+
+                println!("S{}: best {}, size {}->{}, adj fit {}, nodes {}",
+                         s.id, s.best_organism().fitness, s.organisms.len(), s.expected_offspring,
+                         s.average_adj_fitness(), 
+                         s.organisms.iter().map(|o| o.genome.nodes.len() as f64).fold(0.0, |x,y| x+y) / s.organisms.len() as f64);
+            }
+
+            /*println!("Compatibilities: ");
+            for i in species_sorted.iter() {
+                for j in species_sorted.iter() {
+                    print!("{:.1} ", genes::compatibility(&self.compat_coefficients, &self.species[*i].best_organism().genome, &self.species[*j].best_organism().genome));
+                }
+                println!("");
+            }*/
         }
 
         println!("Highest fitness: {}, time since last improvement: {}",
@@ -440,7 +550,7 @@ impl Population {
         // Delete any species that is now empty
         for species in self.species.iter() {
             if species.organisms.len() == 0 {
-                println!("{}", "EMPTY SPECIES!");
+                println!("Species {} empty", species.id);
             }
         }
         self.species.retain(|species| species.organisms.len() > 0);

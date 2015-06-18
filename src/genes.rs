@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::process::Command;
 use std::io::prelude::*;
 use std::io;
@@ -47,7 +48,7 @@ pub struct CompatCoefficients {
 pub static STANDARD_COMPAT_COEFFICIENTS: CompatCoefficients = CompatCoefficients {
     disjoint: 1.0,
     excess: 1.0,
-    weight_diff: 3.0,
+    weight_diff: 2.0,
 };
 
 pub fn compatibility(c: &CompatCoefficients,
@@ -272,13 +273,32 @@ impl Genome {
         return false;
     }
 
-    pub fn to_dot_string(&self) -> String {
+    pub fn to_dot_string(&self, names: HashMap<NodeId, String>) -> String {
         let mut str = String::new();
 
         str.push_str("digraph g {\n");
+        //str.push_str("layout=fdp;");
+
+        let get_name = |node: &Node| {
+            let mut name = match names.get(&node.id) {
+                Some(name) => name.clone(),
+                None => "#".to_string() + &node.id.to_string()
+            };
+
+            if node.node_type == NodeType::Input {
+                name = name + &">";
+            } else if node.node_type == NodeType::Output {
+                name = name + &"<";
+            }
+
+            "\"".to_string() + &name + &"\""
+        };
 
         for node in self.nodes.iter() {
-            str.push_str(&node.id.to_string());
+            str.push_str(&get_name(node));
+            str.push_str(" [color=none, shape=plaintext");
+            //str.push_str(", fontsize=12");
+            str.push_str("];");
             str.push_str("\n");
         }
 
@@ -287,11 +307,29 @@ impl Genome {
                 continue;
             }
 
-            str.push_str(&link.from_id.to_string());
+            let from_name = match names.get(&link.from_id) {
+                Some(name) => name.clone(),
+                None => link.from_id.to_string()
+            };
+            let to_name = match names.get(&link.to_id) {
+                Some(name) => name.clone(),
+                None => link.to_id.to_string()
+            };
+
+            let color = if link.weight < 0.0 { "blue".to_string() } else { "orange".to_string() };
+            let width = link.weight.abs().to_string();
+            let label = &format!("{:.2}", link.weight);
+
+            str.push_str(&get_name(self.get_node(link.from_id).unwrap()));
             str.push_str(" -> ");
-            str.push_str(&link.to_id.to_string());
+            str.push_str(&get_name(self.get_node(link.to_id).unwrap()));
             str.push_str(" [label=");
-            str.push_str(&link.weight.to_string());
+            str.push_str(&label);
+            str.push_str(", penwidth=");
+            str.push_str(&width);
+            str.push_str(", color=");
+            str.push_str(&color);
+            str.push_str(", fontsize=10");
             str.push_str("];");
             str.push_str("\n");
         }
@@ -301,9 +339,10 @@ impl Genome {
         return str;
     }
 
-    pub fn compile_to_png(&self, dot_path: &Path, png_path: &Path) -> io::Result<()> {
+    pub fn compile_to_png(&self, names: HashMap<NodeId, String>,
+                          dot_path: &Path, png_path: &Path) -> io::Result<()> {
         let mut f = try!(File::create(dot_path));
-        try!(f.write_all(self.to_dot_string().as_bytes()));
+        try!(f.write_all(self.to_dot_string(names).as_bytes()));
 
         match Command::new("dot")
             .arg("-Tpng")
