@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::process::Command;
 use std::io::prelude::*;
 use std::io;
-use std::fs;
 use std::fs::File;
 use std::path::Path;
 
@@ -92,6 +91,8 @@ pub fn compatibility(c: &CompatCoefficients,
         }
     }
 
+    assert!(num_matching > 0);
+
     return c.disjoint * num_disjoint as f64 +
            c.excess * num_excess as f64 +
            c.weight_diff * (weight_diff / num_matching as f64);
@@ -105,7 +106,7 @@ impl Genome {
         let mut node_counter = 0;
         let mut innovation_counter = 0;
 
-        for x in 0..num_inputs {
+        for _ in 0..num_inputs {
             genome.nodes.push(Node { id: node_counter, node_type: NodeType::Input });
             node_counter += 1;
         }
@@ -113,7 +114,7 @@ impl Genome {
         genome.nodes.push(Node { id: node_counter, node_type: NodeType::Bias });
         node_counter += 1;
 
-        for y in 0..num_outputs {
+        for _ in 0..num_outputs {
             genome.nodes.push(Node { id: node_counter, node_type: NodeType::Output });
 
             if bias_connected {

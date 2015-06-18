@@ -1,23 +1,21 @@
 use std::collections::HashMap;
-use std::cell::RefCell;
-use std::cmp;
 use genes;
 
 pub fn sigmoid(input_sum: f64) -> f64 {
     let slope = 4.924273;
 
-    //(1.0 / (1.0 + (-slope*input_sum).exp()))
-    input_sum.tanh()
+    (1.0 / (1.0 + (-slope*input_sum).exp()))
+    //input_sum.tanh()
 }
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    gene: genes::Node,
+        gene: genes::Node,
 
-    predecessor_indices: Vec<usize>,
-    successor_indices: Vec<usize>,
-    weights: Vec<f64>,
-    node_type: genes::NodeType,
+        predecessor_indices: Vec<usize>,
+        successor_indices: Vec<usize>,
+        weights: Vec<f64>,
+        node_type: genes::NodeType,
 
     depth: Option<usize>,
 
@@ -170,7 +168,7 @@ impl Network {
             }
         }
 
-        for try in 0..50 {
+        //for try in 0..50 {
             // Calculate input activation for each non-input node
             for node_index in 0..self.nodes.len() {
                 let (active, input_sum) = {
@@ -220,10 +218,10 @@ impl Network {
                 }
             }
 
-            if self.are_outputs_activated() {
+            /*if self.are_outputs_activated() {
                 break;
-            }
-        }
+            }*/
+        //}
 
         if !self.are_outputs_activated() {
             //println!("couldn't activate all outputs in time");

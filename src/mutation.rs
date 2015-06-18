@@ -1,7 +1,5 @@
 extern crate rand;
 
-use std::f32;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use rand::Rng;
 use genes;
@@ -163,8 +161,8 @@ pub fn new_node<R: rand::Rng>(genome: &mut genes::Genome,
     // Select a link gene to split up. The link must not be in a disabled state. 
     let enabled_gene_indices = 
         genome.links.iter().enumerate()
-              .filter(|&(i, link)| link.enabled)
-              .map(|(i, link)| i)
+              .filter(|&(_, link)| link.enabled)
+              .map(|(i, _)| i)
               .collect::<Vec<usize>>();
     
     match rng.choose(&enabled_gene_indices) {
@@ -261,7 +259,7 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
     let mut to_id = 0;
     let mut found = false;
 
-    for try in 0..num_tries {
+    for _ in 0..num_tries {
         if recurrent && rng.next_f64() < self_link_prob {
             // Sometimes make a self loop
             from_id = *rng.choose(&hidden_node_ids).unwrap();

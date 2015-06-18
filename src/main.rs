@@ -1,11 +1,6 @@
-#![allow(unstable)]
-
 extern crate rand;
 
-use std::collections::HashMap;
 use std::io::prelude::*;
-use std::io;
-use std::fs;
 use std::fs::File;
 use std::path::Path;
 use std::thread;
@@ -106,7 +101,7 @@ fn evaluate_multi_threaded(population: &mut pop::Population) {
     }
 
     for thread in threads.into_iter() {
-        thread.join();
+        thread.join().unwrap();
     }
 }
 
@@ -152,15 +147,13 @@ fn main() {
             let mut best = population.best_organism().unwrap().clone();
 
             let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
-            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes());
+            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes()).unwrap();
 
             //evaluate(&mut best, true);
             //println!("genome: {:?}", &best.genome);
             //println!("network: {:?}", &pop::Organism::new(&best.genome).network);
             best.genome.compile_to_png(Path::new(&format!("networks/dot/{}.dot", i)),
-                                       Path::new(&format!("networks/{}-{}.png", i, best.fitness)));
-
-
+                                       Path::new(&format!("networks/{}-{}.png", i, best.fitness))).unwrap();
 
             /*for (j, species) in population.species.iter().enumerate() {
                 species.best_genome.compile_to_png(Path::new(&format!("networks/dot/{}_{}.dot", i, j)),
