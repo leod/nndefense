@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use genes;
 
 pub fn sigmoid(input_sum: f64) -> f64 {
-    let slope = 4.924273;
+    //let slope = 4.924273;
+    //(1.0 / (1.0 + (-slope*input_sum).exp())) * 2.0 - 1.0
 
-    (1.0 / (1.0 + (-slope*input_sum).exp()))
-    //input_sum.tanh()
+    input_sum.tanh()
 }
 
 #[derive(Debug, Clone)]

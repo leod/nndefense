@@ -114,8 +114,8 @@ fn main() {
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
                                                               &pop::STANDARD_SETTINGS,
-                                                              //&mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
-                                                              &mutation::STANDARD_SETTINGS,
+                                                              &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
+                                                              //&mutation::STANDARD_SETTINGS,
                                                               &genes::STANDARD_COMPAT_COEFFICIENTS,
                                                               &initial_genome,
                                                               num_population);
@@ -152,7 +152,8 @@ fn main() {
             //evaluate(&mut best, true);
             //println!("genome: {:?}", &best.genome);
             //println!("network: {:?}", &pop::Organism::new(&best.genome).network);
-            best.genome.compile_to_png(Path::new(&format!("networks/dot/{}.dot", i)),
+            best.genome.compile_to_png(exp::roadgame::node_names(),
+                                       Path::new(&format!("networks/dot/{}.dot", i)),
                                        Path::new(&format!("networks/{}-{}.png", i, best.fitness))).unwrap();
 
             /*for (j, species) in population.species.iter().enumerate() {
