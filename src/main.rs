@@ -62,7 +62,7 @@ fn evaluate_single_threaded(population: &mut pop::Population) {
 }
 
 fn evaluate_multi_threaded(population: &mut pop::Population) {
-    let num_threads = 4;
+    let num_threads = 8;
     let num_population = population.num_organisms();
 
     let num_tasks_per_thread = num_population / num_threads;
@@ -128,7 +128,6 @@ fn main() {
             break;
         }
 
-
         println!("Generation {}", i);
         population.epoch(&mut rng);
         println!("");
@@ -156,9 +155,10 @@ fn main() {
                                        Path::new(&format!("networks/dot/{}.dot", i)),
                                        Path::new(&format!("networks/{}-{}.png", i, best.fitness))).unwrap();
 
-            /*for (j, species) in population.species.iter().enumerate() {
-                species.best_genome.compile_to_png(Path::new(&format!("networks/dot/{}_{}.dot", i, j)),
-                                                   Path::new(&format!("networks/{}_{}.png", i, j)));
+            /*for species in population.species.iter() {
+                species.best_genome.compile_to_png(exp::roadgame::node_names(),
+                                                   Path::new(&format!("networks/dot/{}_{}.dot", i, species.id)),
+                                                   Path::new(&format!("networks/{}_{}.png", i, species.id)));
             }*/
         }
     }

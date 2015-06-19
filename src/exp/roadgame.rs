@@ -197,7 +197,8 @@ pub fn evaluate_to_death(network: &mut nn::Network) -> f64 {
     let num_runs = 500;
     let mut num_steps = 0;
 
-    let seed: &[_] = &[1337];
+    //let seed: &[_] = &[42];
+    let seed: &[_] = &[rand::thread_rng().gen::<usize>()];
     let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
     for _ in 0..num_runs {
@@ -222,7 +223,8 @@ pub fn evaluate_to_death_to_string(network: &mut nn::Network) -> String {
     let num_runs = 500;
     let mut num_steps = 0;
 
-    let seed: &[_] = &[1337];
+    //let seed: &[_] = &[42];
+    let seed: &[_] = &[rand::thread_rng().gen::<usize>()];
     let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
     let mut str = String::new();

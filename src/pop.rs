@@ -18,7 +18,7 @@ pub struct Settings {
 pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.3,
     compat_threshold: 6.0,
-    dropoff_age: 15,
+    dropoff_age: 30,
     target_num_species: 10
 };
 
@@ -49,7 +49,7 @@ impl Organism {
 pub struct Species {
     pub organisms: Vec<Organism>,
 
-    id: usize, // For identification by the user
+    pub id: usize, // For identification by the user
 
     expected_offspring: usize,
 
