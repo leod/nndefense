@@ -323,9 +323,11 @@ impl Genome {
             str.push_str(&get_name(self.get_node(link.from_id).unwrap()));
             str.push_str(" -> ");
             str.push_str(&get_name(self.get_node(link.to_id).unwrap()));
-            str.push_str(" [label=");
-            str.push_str(&label);
-            str.push_str(", penwidth=");
+            str.push_str(" [");
+            //str.push_str("label=");
+            //str.push_str(&label);
+            //str.push_str(", ");
+            str.push_str("penwidth=");
             str.push_str(&width);
             str.push_str(", color=");
             str.push_str(&color);
