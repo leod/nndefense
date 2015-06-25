@@ -111,6 +111,8 @@ fn evaluate_multi_threaded(experiment: &exp::Experiment, population: &mut pop::P
 }
 
 fn main() {
+    exp::tictactoe::play(&mut exp::tictactoe::random_strategy, &mut exp::tictactoe::random_strategy, true);
+
     let mut i = 0;
     let mut rng = rand::thread_rng();
 
