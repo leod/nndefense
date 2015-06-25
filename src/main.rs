@@ -16,6 +16,8 @@ mod pop;
 mod mating;
 mod exp;
 
+use exp::Experiment;
+
 /*fn to_f(x: bool) -> f64 {
     if x { 1.0 } else { -1.0 }
 }
@@ -47,21 +49,21 @@ fn evaluate(organism: &mut pop::Organism, print: bool) {
     organism.fitness = fitness;
 } */
 
-fn evaluate(population: &mut pop::Population) {
-    //evaluate_single_threaded(population);
-    evaluate_multi_threaded(population);
+fn evaluate(experiment: &exp::Experiment, population: &mut pop::Population) {
+    evaluate_single_threaded(experiment, population);
+    //evaluate_multi_threaded(experiment, population);
 }
 
-fn evaluate_single_threaded(population: &mut pop::Population) {
+fn evaluate_single_threaded(experiment: &exp::Experiment, population: &mut pop::Population) {
     for species in population.species.iter_mut() {
         for organism in species.organisms.iter_mut() {
-            let fitness = exp::roadgame::evaluate_to_death(&mut organism.network);
+            let fitness = experiment.evaluate(&mut organism.network);
             organism.fitness = fitness;
         }
     }
 }
 
-fn evaluate_multi_threaded(population: &mut pop::Population) {
+fn evaluate_multi_threaded(experiment: &exp::Experiment, population: &mut pop::Population) {
     let num_threads = 4;
     let num_population = population.num_organisms();
 
@@ -77,18 +79,21 @@ fn evaluate_multi_threaded(population: &mut pop::Population) {
 
     let (results_send, results_recv): (Sender<(usize, usize, f64)>, Receiver<(usize, usize, f64)>) = channel();
     let shared_organisms = Arc::new(organisms); 
+    let shared_experiment = Arc::new(experiment);
     let mut threads = vec![];
 
     for k in 0..num_threads {
         let thread_organisms = shared_organisms.clone();
         let thread_results = results_send.clone();
+        let thread_experiment = shared_experiment.clone();
 
         threads.push(thread::spawn(move || {
             let local_organisms = &thread_organisms[num_tasks_per_thread*k..num_tasks_per_thread*(k+1)];
 
             for &(species_index, organism_index, ref organism) in local_organisms {
                 let mut network = organism.network.clone();
-                let fitness = exp::roadgame::evaluate_to_death(&mut network);
+                //let fitness = thread_experiment.evaluate(&mut network);
+                let fitness = -1.0; // TODO: send experiment
 
                 thread_results.send((species_index, organism_index, fitness)).unwrap();
             }
@@ -109,8 +114,9 @@ fn main() {
     let mut i = 0;
     let mut rng = rand::thread_rng();
 
-    let num_population = 1024;
-    let initial_genome = exp::roadgame::initial_genome();
+    let num_population = 100;
+    let mut experiment = exp::roadgame::RoadGameExperiment;
+    let initial_genome = experiment.initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
                                                               &pop::STANDARD_SETTINGS,
@@ -119,7 +125,7 @@ fn main() {
                                                               &genes::STANDARD_COMPAT_COEFFICIENTS,
                                                               &initial_genome,
                                                               num_population);
-    evaluate(&mut population);
+    evaluate(&experiment as &exp::Experiment, &mut population);
 
     loop {
         i += 1;
@@ -134,7 +140,7 @@ fn main() {
         println!("");
 
         {
-            evaluate(&mut population);
+            evaluate(&experiment as &exp::Experiment, &mut population);
             /*for species in population.species.iter_mut() {
                 for organism in species.organisms.iter_mut() {
                     //evaluate(organism, false);
@@ -146,13 +152,13 @@ fn main() {
         {
             let mut best = population.best_organism().unwrap().clone();
 
-            let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
-            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes()).unwrap();
+            /*let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
+            f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes()).unwrap();*/
 
             //evaluate(&mut best, true);
             //println!("genome: {:?}", &best.genome);
             //println!("network: {:?}", &pop::Organism::new(&best.genome).network);
-            best.genome.compile_to_png(exp::roadgame::node_names(),
+            best.genome.compile_to_png(experiment.node_names(),
                                        Path::new(&format!("networks/dot/{}.dot", i)),
                                        Path::new(&format!("networks/{}-{}.png", i, best.fitness))).unwrap();
 
