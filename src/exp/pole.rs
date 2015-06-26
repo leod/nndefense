@@ -92,7 +92,7 @@ impl exp::Experiment for PoleExperiment {
         map
     }
 
-    fn evaluate(&self, network: &mut nn::Network) -> f64 {
+    fn evaluate(&self, network: &mut nn::Network, organisms: &[pop::Organism]) -> f64 {
         const MAX_STEPS: usize = 100;
         const THRESH: usize = 100;
 
@@ -105,7 +105,7 @@ impl exp::Experiment for PoleExperiment {
         0.0
     }
 
-    fn evaluate_to_string(&self, network: &mut nn::Network, population: &pop::Population) -> String {
+    fn evaluate_to_string(&self, network: &mut nn::Network) -> String {
         "".to_string()
     }
 
