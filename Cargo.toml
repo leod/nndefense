@@ -1,8 +1,8 @@
 [package]
-
-name = "nndefense"
+name = "neat"
 version = "0.0.0"
 authors = ["leod <subtle.frustration@proton.me>"]
 
 [dependencies]
 rand = "0.3.0"
+rustc-serialize = "0.3"

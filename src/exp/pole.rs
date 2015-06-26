@@ -7,6 +7,7 @@ use rand::SeedableRng;
 use genes;
 use nn;
 use exp;
+use pop;
 
 pub struct PoleExperiment;
 
@@ -102,5 +103,13 @@ impl exp::Experiment for PoleExperiment {
         }
 
         0.0
+    }
+
+    fn evaluate_to_string(&self, network: &mut nn::Network) -> String {
+        "".to_string()
+    }
+
+    fn post_evaluation(&mut self, population: &pop::Population) {
+
     }
 }
