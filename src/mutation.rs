@@ -107,8 +107,8 @@ pub fn mutate<R: rand::Rng>(genome: &mut genes::Genome,
         }
 
         if rng.next_f64() < settings.change_link_weights_prob {
-            //change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
-            change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
+            change_link_weights_standard(genome, rng, 1.0, settings.change_link_weights_power);
+            //change_link_weights_perturbate_some(genome, rng, 0.3, settings.change_link_weights_power);
         }
     }
 }

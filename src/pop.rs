@@ -76,7 +76,7 @@ pub struct Population {
 
     pub species: Vec<Species>,
 
-    generation: usize,
+    pub generation: usize,
     highest_fitness: f64, // Over all time
     time_since_last_improvement: usize, // Used to detect stagnation
 }

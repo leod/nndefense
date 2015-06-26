@@ -15,6 +15,7 @@ use neat::exp;
 use neat::pop;
 use neat::mutation;
 use neat::exp::Experiment;
+use neat::exp::tictactoe::exp::TicTacToeExperiment;
 
 /*fn to_f(x: bool) -> f64 {
     if x { 1.0 } else { -1.0 }
@@ -47,57 +48,64 @@ fn evaluate(organism: &mut pop::Organism, print: bool) {
     organism.fitness = fitness;
 } */
 
-fn evaluate(experiment: &exp::Experiment, population: &mut pop::Population) {
-    evaluate_single_threaded(experiment, population);
-    //evaluate_multi_threaded(experiment, population);
+fn evaluate<E: exp::Experiment + Send + Sync + 'static>(experiment: Arc<E>, population: &mut pop::Population) {
+    //evaluate_single_threaded(experiment, population);
+    evaluate_multi_threaded(experiment, population);
 }
 
-fn evaluate_single_threaded(experiment: &exp::Experiment, population: &mut pop::Population) {
+fn evaluate_single_threaded<E: exp::Experiment + Send + Sync + 'static>(experiment: Arc<E>, population: &mut pop::Population) {
     for species in population.species.iter_mut() {
         for organism in species.organisms.iter_mut() {
-            let fitness = experiment.evaluate(&mut organism.network);
+            let fitness = 0.0; //experiment.evaluate(&mut organism.network);
             organism.fitness = fitness;
         }
     }
 }
 
-fn evaluate_multi_threaded(experiment: &exp::Experiment, population: &mut pop::Population) {
+fn evaluate_multi_threaded<E: exp::Experiment + Send + Sync + 'static>(experiment: Arc<E>, population: &mut pop::Population) {
     let num_threads = 4;
     let num_population = population.num_organisms();
 
     let num_tasks_per_thread = num_population / num_threads;
 
+    let mut organism_indices = vec![];
     let mut organisms = vec![];
 
     for (species_index, species) in population.species.iter().enumerate() {
         for (organism_index, organism) in species.organisms.iter().enumerate() {
-            organisms.push((species_index, organism_index, organism.clone()));
+            organism_indices.push((species_index, organism_index));
+            organisms.push(organism.clone());
         }
     }
 
     let (results_send, results_recv): (Sender<(usize, usize, f64)>, Receiver<(usize, usize, f64)>) = channel();
+    let shared_organism_indices = Arc::new(organism_indices);
     let shared_organisms = Arc::new(organisms); 
-    let shared_experiment = Arc::new(experiment);
     let mut threads = vec![];
 
     for k in 0..num_threads {
+        let thread_organism_indices = shared_organism_indices.clone();
         let thread_organisms = shared_organisms.clone();
         let thread_results = results_send.clone();
-        let thread_experiment = shared_experiment.clone();
+        let thread_experiment = experiment.clone();
 
         threads.push(thread::spawn(move || {
-            let local_organisms = &thread_organisms[num_tasks_per_thread*k..num_tasks_per_thread*(k+1)];
+            let a = num_tasks_per_thread*k;
+            let b = num_tasks_per_thread*(k+1);
+            let local_organism_indices = &thread_organism_indices[a..b];
+            let local_organisms = &thread_organisms[a..b];
 
-            for &(species_index, organism_index, ref organism) in local_organisms {
+            for (&(species_index, organism_index), ref organism) in local_organism_indices.iter().zip(local_organisms) {
                 let mut network = organism.network.clone();
-                //let fitness = thread_experiment.evaluate(&mut network);
-                let fitness = -1.0; // TODO: send experiment
+                let fitness = thread_experiment.evaluate(&mut network, &thread_organisms[..]);
 
                 thread_results.send((species_index, organism_index, fitness)).unwrap();
             }
         }));
     }
 
+    // Receive changes and make the actual mutations in the population.
+    // Blocks until all organisms have been evaluated by the threads.
     for _ in 0..num_population {
         let (species_index, organism_index, fitness) = results_recv.recv().unwrap();
         population.species[species_index].organisms[organism_index].fitness = fitness;
@@ -122,7 +130,7 @@ fn main() {
 
     let num_population = 200;
     //let mut experiment = exp::roadgame::RoadGameExperiment;
-    let mut experiment = exp::tictactoe::TicTacToeExperiment;
+    let mut experiment = Arc::new(exp::tictactoe::exp::TicTacToeExperiment::new());
     let initial_genome = experiment.initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
@@ -132,7 +140,7 @@ fn main() {
                                                               &genes::STANDARD_COMPAT_COEFFICIENTS,
                                                               &initial_genome,
                                                               num_population);
-    evaluate(&experiment as &exp::Experiment, &mut population);
+    evaluate(experiment.clone(), &mut population);
 
     loop {
         i += 1;
@@ -147,7 +155,7 @@ fn main() {
         println!("");
 
         {
-            evaluate(&experiment as &exp::Experiment, &mut population);
+            evaluate(experiment.clone(), &mut population);
             /*for species in population.species.iter_mut() {
                 for organism in species.organisms.iter_mut() {
                     //evaluate(organism, false);
@@ -160,11 +168,11 @@ fn main() {
             let mut best = population.best_organism().unwrap().clone();
 
             println!("best: {}, best forkable: {}, random: {}, center: {}, bad: {}",
-                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BestStrategy { forkable: false }, 100),
-                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BestStrategy { forkable: true }, 100),
-                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::RandomStrategy, 100),
-                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::CenterStrategy, 100),
-                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BadStrategy, 100));
+                     exp::tictactoe::exp::score_network(&mut best.network, &mut exp::tictactoe::strats::BestStrategy { forkable: false }, 100),
+                     exp::tictactoe::exp::score_network(&mut best.network, &mut exp::tictactoe::strats::BestStrategy { forkable: true }, 100),
+                     exp::tictactoe::exp::score_network(&mut best.network, &mut exp::tictactoe::strats::RandomStrategy, 100),
+                     exp::tictactoe::exp::score_network(&mut best.network, &mut exp::tictactoe::strats::CenterStrategy, 100),
+                     exp::tictactoe::exp::score_network(&mut best.network, &mut exp::tictactoe::strats::BadStrategy, 100));
 
             /*let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
             f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes()).unwrap();*/
@@ -184,11 +192,4 @@ fn main() {
             }*/
         }
     }
-
-    /*let mut best = population.best_organism().unwrap().clone();
-    //evaluate(&mut best, true);
-    exp::roadgame::evaluate_to_death(&mut best);
-    println!("best fitness: {}", best.fitness);
-
-    best.genome.compile_to_png(Path::new("best.dot"), Path::new("best.png"));*/
 }
