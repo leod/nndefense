@@ -6,7 +6,7 @@ use genes;
 
 pub type Prob = f64;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Settings {
     // Probabilities for specific genome mutations
     pub new_node_prob: Prob,
@@ -17,8 +17,7 @@ pub struct Settings {
     pub uniform_perturbation_prob: Prob,
 
     pub recurrent_link_prob: Prob,
-    pub self_link_prob: Prob,
-
+    pub self_link_prob: Prob, 
     pub toggle_enable_prob: Prob,
 
     // Probabilities for different kinds of reproduction
@@ -30,10 +29,10 @@ pub struct Settings {
 
 pub static STANDARD_SETTINGS: Settings =
     Settings {
-        new_node_prob: 0.01,
-        new_link_prob: 0.2,
+        new_node_prob: 0.005,
+        new_link_prob: 0.05,
 
-        change_link_weights_prob: 0.8,
+        change_link_weights_prob: 0.75,
         change_link_weights_power: 0.5,
         uniform_perturbation_prob: 0.9,
 
@@ -241,7 +240,7 @@ pub fn new_link<R: rand::Rng>(genome: &mut genes::Genome,
 
     let hidden_node_ids = 
         genome.nodes.iter()
-              .filter(|node| node.node_type == genes::NodeType::Hidden)
+              .filter(|node| node.node_type == genes::NodeType::Hidden || node.node_type == genes::NodeType::Output)
               .map(|node| node.id)
               .collect::<Vec<usize>>();
 

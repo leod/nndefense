@@ -7,19 +7,19 @@ use mutation;
 use nn;
 use mating;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Settings {
     pub survival_threshold: f64,
     pub compat_threshold: f64,
-    pub dropoff_age: usize,
-    pub target_num_species: usize,
+    pub dropoff_age: Option<usize>,
+    pub target_num_species: Option<usize>,
 }
 
 pub static STANDARD_SETTINGS: Settings = Settings {
-    survival_threshold: 0.3,
-    compat_threshold: 6.0,
-    dropoff_age: 30,
-    target_num_species: 10
+    survival_threshold: 0.2,
+    compat_threshold: 0.9,
+    dropoff_age: Some(40),
+    target_num_species: Some(30)
 };
 
 #[derive(Clone)]
@@ -76,7 +76,7 @@ pub struct Population {
 
     pub species: Vec<Species>,
 
-    generation: usize,
+    pub generation: usize,
     highest_fitness: f64, // Over all time
     time_since_last_improvement: usize, // Used to detect stagnation
 }
@@ -107,12 +107,12 @@ impl Species {
 
     /// Calculate organisms' adjusted fitness by dividing by species size (fitness sharing).
     /// Then, the organisms of the species are sorted by their adjusted fitness.
-    pub fn prepare_for_epoch(&mut self, dropoff_age: usize) {
+    pub fn prepare_for_epoch(&mut self, dropoff_age: Option<usize>) {
         let num_organisms = self.organisms.len();
         assert!(num_organisms > 0);
 
         // Penalty for species that don't improve for a longer time
-        let penalize = self.time_since_last_improvement > dropoff_age;
+        let penalize = dropoff_age.is_some() && self.time_since_last_improvement > dropoff_age.unwrap();
 
         if penalize {
             println!("Penalizing species {}", self.id);
@@ -204,7 +204,7 @@ impl Species {
             }
         }
 
-        while offspring.len() < self.expected_offspring { // HACK: Leave room for the champ
+        while offspring.len() < self.expected_offspring {
             if rng.next_f64() < mutation_settings.mutate_only_prob {
                 // Pick one organism and just mutate it and that's the new offspring
                 let organism_index = rng.gen_range(0, self.organisms.len());
@@ -355,7 +355,8 @@ impl Population {
         let total_population = self.num_organisms();
 
         // If we have population-wide stagnation, give all the offspring to the best two species
-        if self.time_since_last_improvement >= self.settings.dropoff_age {
+        if self.settings.dropoff_age.is_some() &&
+           self.time_since_last_improvement >= self.settings.dropoff_age.unwrap() {
             println!("No improvement for {} epochs, keeping only the first two species",
                      self.time_since_last_improvement);
 
@@ -452,11 +453,13 @@ impl Population {
 
         // Adjust the threshold by which we consider two organisms to be in the same species.
         // We try to keep the number of species constant (though this does not always seem to work).
-        if self.generation > 0 {
-            if self.species.len() < self.settings.target_num_species {
+        if self.settings.target_num_species.is_some() && self.generation > 0 {
+            let target_num = self.settings.target_num_species.unwrap();
+
+            if self.species.len() < target_num {
                 self.settings.compat_threshold -= 0.3;
             }
-            if self.species.len() > self.settings.target_num_species {
+            if self.species.len() > target_num {
                 self.settings.compat_threshold += 0.3;
             }
 
