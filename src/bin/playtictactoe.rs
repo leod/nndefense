@@ -12,5 +12,29 @@ fn main() {
     let genome = genes::Genome::load(Path::new(&env::args().nth(1).unwrap()));
     let mut organism = pop::Organism::new(&genome);
 
-    tictactoe::game::play(&mut tictactoe::strats::InputStrategy, &mut tictactoe::exp::NetworkStrategy { network: &mut organism.network }, true);
+    println!("BEST vs NETWORK");
+    tictactoe::game::play(&mut tictactoe::strats::BestStrategy { forkable: false },
+                          &mut tictactoe::exp::NetworkStrategy { network: &mut organism.network }, true);
+
+    println!("");
+    println!("NETWORK vs BEST");
+    tictactoe::game::play(&mut tictactoe::exp::NetworkStrategy { network: &mut organism.network },
+                          &mut tictactoe::strats::BestStrategy { forkable: false }, true);
+
+    println!("");
+    println!("FORKABLE vs NETWORK");
+    tictactoe::game::play(&mut tictactoe::strats::BestStrategy { forkable: false },
+                          &mut tictactoe::exp::NetworkStrategy { network: &mut organism.network }, true);
+
+    println!("");
+    println!("NETWORK vs FORKABLE");
+    tictactoe::game::play(&mut tictactoe::exp::NetworkStrategy { network: &mut organism.network },
+                          &mut tictactoe::strats::BestStrategy { forkable: false }, true);
+
+    println!("");
+    println!("");
+    println!("");
+    println!("PLAY!");
+    tictactoe::game::play(&mut tictactoe::exp::NetworkStrategy { network: &mut organism.network },
+                          &mut tictactoe::strats::InputStrategy, true);
 }

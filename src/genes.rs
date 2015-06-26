@@ -40,7 +40,7 @@ pub struct Genome {
     pub links: Vec<Link>, // Sorted by innovation number in increasing order
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct CompatCoefficients {
     pub disjoint: f64,
     pub excess: f64,
@@ -308,15 +308,6 @@ impl Genome {
             if !link.enabled {
                 continue;
             }
-
-            let from_name = match names.get(&link.from_id) {
-                Some(name) => name.clone(),
-                None => link.from_id.to_string()
-            };
-            let to_name = match names.get(&link.to_id) {
-                Some(name) => name.clone(),
-                None => link.to_id.to_string()
-            };
 
             let color = if link.weight < 0.0 { "blue".to_string() } else { "orange".to_string() };
             let width = link.weight.abs().to_string();

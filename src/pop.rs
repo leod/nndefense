@@ -7,18 +7,18 @@ use mutation;
 use nn;
 use mating;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Settings {
     pub survival_threshold: f64,
     pub compat_threshold: f64,
-    pub dropoff_age: usize,
+    pub dropoff_age: Option<usize>,
     pub target_num_species: Option<usize>,
 }
 
 pub static STANDARD_SETTINGS: Settings = Settings {
     survival_threshold: 0.2,
     compat_threshold: 0.9,
-    dropoff_age: 35,
+    dropoff_age: Some(40),
     target_num_species: Some(10)
 };
 
@@ -107,12 +107,12 @@ impl Species {
 
     /// Calculate organisms' adjusted fitness by dividing by species size (fitness sharing).
     /// Then, the organisms of the species are sorted by their adjusted fitness.
-    pub fn prepare_for_epoch(&mut self, dropoff_age: usize) {
+    pub fn prepare_for_epoch(&mut self, dropoff_age: Option<usize>) {
         let num_organisms = self.organisms.len();
         assert!(num_organisms > 0);
 
         // Penalty for species that don't improve for a longer time
-        let penalize = self.time_since_last_improvement > dropoff_age;
+        let penalize = dropoff_age.is_some() && self.time_since_last_improvement > dropoff_age.unwrap();
 
         if penalize {
             println!("Penalizing species {}", self.id);
@@ -355,7 +355,8 @@ impl Population {
         let total_population = self.num_organisms();
 
         // If we have population-wide stagnation, give all the offspring to the best two species
-        if self.time_since_last_improvement >= self.settings.dropoff_age {
+        if self.settings.dropoff_age.is_some() &&
+           self.time_since_last_improvement >= self.settings.dropoff_age.unwrap() {
             println!("No improvement for {} epochs, keeping only the first two species",
                      self.time_since_last_improvement);
 

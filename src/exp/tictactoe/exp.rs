@@ -4,10 +4,12 @@ use genes;
 use nn;
 use exp;
 use pop;
+use mutation;
 
 use exp::tictactoe::game::*;
 use exp::tictactoe::strats::*;
 
+#[derive(Clone)]
 struct HallOfFame {
     fitness_weight: f64,
     generations_per_champion: usize,
@@ -16,6 +18,7 @@ struct HallOfFame {
     last_update: usize,
 }
 
+#[derive(Clone)]
 pub struct TicTacToeExperiment {
     hall_of_fame: HallOfFame
 }
@@ -62,10 +65,12 @@ impl<'a> Strategy for NetworkStrategy<'a> {
         for x in 0..3 {
             for y in 0..3 {
                 if state.field[x][y].is_some() {
+                    i += 1;
                     continue;
                 }
 
                 if highest_move.is_none() || output[i].1 > highest_activation {
+                    //println!("Picking {},{} at {} with {}, id {}", x, y, i, output[i].1, output[i].0);
                     highest_move = Some((x,y));
                     highest_activation = output[i].1;
                 }
@@ -94,11 +99,11 @@ pub fn score_network<Other: Strategy>(network: &mut nn::Network, other: &mut Oth
         let score = match outcome {
             Some(winner) =>
                 if winner == player {
-                    5.0
+                    10.0
                 } else {
                     0.0
                 },
-            None => 2.0
+            None => 1.0
         };
 
         total_score += score;
@@ -144,8 +149,20 @@ impl TicTacToeExperiment {
 }
 
 impl exp::Experiment for TicTacToeExperiment {
+    fn population_settings(&self) -> pop::Settings {
+        pop::Settings { dropoff_age: None, .. pop::STANDARD_SETTINGS }
+    }
+
+    fn mutation_settings(&self) -> mutation::Settings {
+        mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }
+    }
+
+    fn compat_coefficients(&self) -> genes::CompatCoefficients {
+        genes::STANDARD_COMPAT_COEFFICIENTS
+    }
+
     fn initial_genome(&self) -> genes::Genome {
-        genes::Genome::initial_genome(9, 9, 9, true)
+        genes::Genome::initial_genome(9, 9, 0, true)
     }
 
     fn node_names(&self) -> HashMap<genes::NodeId, String> {
@@ -173,13 +190,14 @@ impl exp::Experiment for TicTacToeExperiment {
     }
 
     fn evaluate(&self, network: &mut nn::Network, organisms: &[pop::Organism]) -> f64 {
-        /*let vs_fixed = score_network(network, &mut BestStrategy { forkable: false }, 100) + 
-                       score_network(network, &mut BestStrategy { forkable: true }, 100) + 
-                       score_network(network, &mut RandomStrategy, 100) +
-                       score_network(network, &mut CenterStrategy, 100) +
-                       score_network(network, &mut BadStrategy, 100);*/
+        /*let vs_fixed = (4.0 * score_network(network, &mut BestStrategy { forkable: false }, 100) + 
+                        2.0  * score_network(network, &mut BestStrategy { forkable: true }, 100) + 
+                        1.0  * score_network(network, &mut RandomStrategy, 100) +
+                        1.0  * score_network(network, &mut CenterStrategy, 100) +
+                        1.0  * score_network(network, &mut BadStrategy, 100)) / 500.0;*/
 
         let vs_fixed = 0.0;
+        //return vs_fixed.powi(2);
 
         // Play against all the other organisms
         let mut vs_pop = 0.0;
@@ -189,7 +207,7 @@ impl exp::Experiment for TicTacToeExperiment {
             // activation state
             let mut network2 = organism.network.clone();
 
-            vs_pop += score_network_vs_network(network, &mut network2);
+            vs_pop += score_network_vs_network(network, &mut network2) / organisms.len() as f64;
         }
 
         // Play against hall of fame
@@ -198,14 +216,10 @@ impl exp::Experiment for TicTacToeExperiment {
         for organism in self.hall_of_fame.champions.iter() {
             let mut network2 = organism.network.clone();
 
-            vs_hof += score_network_vs_network(network, &mut network2);
+            vs_hof += score_network_vs_network(network, &mut network2) / self.hall_of_fame.champions.len() as f64;
         }
 
-        /*println!("pop: {}, hof: {}", vs_pop, vs_hof);
-        println!("{}", vs_fixed + vs_pop / organisms.len() as f64 + vs_hof / self.hall_of_fame.champions.len() as f64);*/
-        vs_fixed +
-        vs_pop / organisms.len() as f64 +
-        if !self.hall_of_fame.champions.is_empty() { vs_hof / self.hall_of_fame.champions.len() as f64 } else { 0.0 }
+        (vs_fixed + vs_pop + vs_hof).powi(2)
     }
 
     fn evaluate_to_string(&self, network: &mut nn::Network) -> String {

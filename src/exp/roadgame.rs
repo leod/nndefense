@@ -4,14 +4,17 @@ use std::collections::HashMap;
 use rand::Rng;
 use rand::StdRng;
 use rand::SeedableRng;
+
 use genes;
 use nn;
 use exp;
 use pop;
+use mutation;
 
 const ROAD_WIDTH: usize = 3; 
 const ROAD_HEIGHT: usize = 4;
 
+#[derive(Clone)]
 pub struct RoadGameExperiment;
 
 struct GameState {
@@ -166,6 +169,18 @@ fn initial_state(seed: usize) -> GameState {
 }
 
 impl exp::Experiment for RoadGameExperiment {
+    fn population_settings(&self) -> pop::Settings {
+        pop::STANDARD_SETTINGS
+    }
+
+    fn mutation_settings(&self) -> mutation::Settings {
+        mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }
+    }
+
+    fn compat_coefficients(&self) -> genes::CompatCoefficients {
+        genes::STANDARD_COMPAT_COEFFICIENTS
+    }
+
     fn initial_genome(&self) -> genes::Genome {
         genes::Genome::initial_genome(ROAD_WIDTH * (ROAD_HEIGHT+0), 1, 0, true)
     }
