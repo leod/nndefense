@@ -105,7 +105,7 @@ impl exp::Experiment for PoleExperiment {
         0.0
     }
 
-    fn evaluate_to_string(&self, network: &mut nn::Network) -> String {
+    fn evaluate_to_string(&self, network: &mut nn::Network, population: &pop::Population) -> String {
         "".to_string()
     }
 
