@@ -15,7 +15,6 @@ use neat::exp;
 use neat::pop;
 use neat::mutation;
 use neat::exp::Experiment;
-use neat::exp::tictactoe::exp::TicTacToeExperiment;
 
 /*fn to_f(x: bool) -> f64 {
     if x { 1.0 } else { -1.0 }
@@ -48,9 +47,13 @@ fn evaluate(organism: &mut pop::Organism, print: bool) {
     organism.fitness = fitness;
 } */
 
-fn evaluate<E: exp::Experiment + Send + Sync + 'static>(experiment: Arc<E>, population: &mut pop::Population) {
+fn evaluate<E: exp::Experiment + Send + Sync + Clone + 'static>(experiment: &mut E, population: &mut pop::Population) {
     //evaluate_single_threaded(experiment, population);
-    evaluate_multi_threaded(experiment, population);
+    let shared_experiment = Arc::new(experiment.clone());
+    
+    evaluate_multi_threaded(shared_experiment, population);
+
+    experiment.post_evaluation(&population);
 }
 
 fn evaluate_single_threaded<E: exp::Experiment + Send + Sync + 'static>(experiment: Arc<E>, population: &mut pop::Population) {
@@ -128,19 +131,17 @@ fn main() {
     let mut i = 0;
     let mut rng = rand::thread_rng();
 
-    let num_population = 200;
+    let num_population = 300;
     //let mut experiment = exp::roadgame::RoadGameExperiment;
-    let mut experiment = Arc::new(exp::tictactoe::exp::TicTacToeExperiment::new());
-    let initial_genome = experiment.initial_genome();
+    let mut experiment = exp::tictactoe::exp::TicTacToeExperiment::new();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
-                                                              &pop::STANDARD_SETTINGS,
-                                                              &mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS},
-                                                              //&mutation::STANDARD_SETTINGS,
-                                                              &genes::STANDARD_COMPAT_COEFFICIENTS,
-                                                              &initial_genome,
+                                                              &experiment.population_settings(),
+                                                              &experiment.mutation_settings(),
+                                                              &experiment.compat_coefficients(),
+                                                              &experiment.initial_genome(),
                                                               num_population);
-    evaluate(experiment.clone(), &mut population);
+    evaluate(&mut experiment, &mut population);
 
     loop {
         i += 1;
@@ -155,7 +156,7 @@ fn main() {
         println!("");
 
         {
-            evaluate(experiment.clone(), &mut population);
+            evaluate(&mut experiment, &mut population);
             /*for species in population.species.iter_mut() {
                 for organism in species.organisms.iter_mut() {
                     //evaluate(organism, false);

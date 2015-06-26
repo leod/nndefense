@@ -4,11 +4,14 @@ use std::collections::HashMap;
 use rand::Rng;
 use rand::StdRng;
 use rand::SeedableRng;
+
 use genes;
 use nn;
 use exp;
 use pop;
+use mutation;
 
+#[derive(Clone)]
 pub struct PoleExperiment;
 
 struct PoleState {
@@ -77,6 +80,18 @@ fn network_input(state: &PoleState, network: &mut nn::Network) {
 }
 
 impl exp::Experiment for PoleExperiment {
+    fn population_settings(&self) -> pop::Settings {
+        pop::STANDARD_SETTINGS
+    }
+
+    fn mutation_settings(&self) -> mutation::Settings {
+        mutation::STANDARD_SETTINGS
+    }
+
+    fn compat_coefficients(&self) -> genes::CompatCoefficients {
+        genes::STANDARD_COMPAT_COEFFICIENTS
+    }
+
     fn initial_genome(&self) -> genes::Genome {
         genes::Genome::initial_genome(4, 2, 0, true)
     }
