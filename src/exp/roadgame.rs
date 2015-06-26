@@ -4,11 +4,18 @@ use std::collections::HashMap;
 use rand::Rng;
 use rand::StdRng;
 use rand::SeedableRng;
+
 use genes;
 use nn;
+use exp;
+use pop;
+use mutation;
 
 const ROAD_WIDTH: usize = 3; 
 const ROAD_HEIGHT: usize = 4;
+
+#[derive(Clone)]
+pub struct RoadGameExperiment;
 
 struct GameState {
     road: [[bool; ROAD_HEIGHT]; ROAD_WIDTH],
@@ -161,96 +168,114 @@ fn initial_state(seed: usize) -> GameState {
     }
 }
 
-pub fn initial_genome() -> genes::Genome {
-    genes::Genome::initial_genome(ROAD_WIDTH * (ROAD_HEIGHT+0), 1, 0, true)
-}
-
-pub fn node_names() -> HashMap<genes::NodeId, String> {
-    /*[(0, "P0".to_string()), (1, "P1".to_string()), (2, "P2".to_string()),
-     (3, "00".to_string()), (4, "01".to_string()), (5, "02".to_string()),
-     (6, "10".to_string()), (7, "11".to_string()), (8, "12".to_string()),
-     (9, "20".to_string()), (10, "21".to_string()), (11, "22".to_string()),
-     (12, "B".to_string()), (13, "O".to_string())].into_iter().collect()*/
-
-    let mut map = HashMap::new();
-
-    map.insert(0, "P0".to_string());
-    map.insert(1, "P1".to_string());
-    map.insert(2, "P2".to_string());
-    map.insert(3, "01".to_string());
-    map.insert(4, "11".to_string());
-    map.insert(5, "21".to_string());
-    map.insert(6, "02".to_string());
-    map.insert(7, "12".to_string());
-    map.insert(8, "22".to_string());
-    map.insert(9, "03".to_string());
-    map.insert(10, "13".to_string());
-    map.insert(11, "23".to_string());
-    map.insert(12, "B".to_string());
-    map.insert(13, "O".to_string());
-
-    map
-}
-
-pub fn evaluate_to_death(network: &mut nn::Network) -> f64 {
-    let max_steps = 10000;
-    let num_runs = 500;
-    let mut num_steps = 0;
-
-    //let seed: &[_] = &[42];
-    let seed: &[_] = &[rand::thread_rng().gen::<usize>()];
-    let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
-
-    for _ in 0..num_runs {
-        let mut state = initial_state(rng.gen::<usize>());
-        network.flush();
-
-        for _ in 0..max_steps {
-            let input = network_input(&state, network);
-            road_game_step(&mut state, input);
-            num_steps += 1;
-            if state.hit_now {
-                break;
-            }
-        }
+impl exp::Experiment for RoadGameExperiment {
+    fn population_settings(&self) -> pop::Settings {
+        pop::STANDARD_SETTINGS
     }
 
-    (num_steps as f64 / num_runs as f64).powf(2.0)
-}
+    fn mutation_settings(&self) -> mutation::Settings {
+        mutation::Settings { recurrent_link_prob: 0.0, .. mutation::STANDARD_SETTINGS }
+    }
 
-pub fn evaluate_to_death_to_string(network: &mut nn::Network) -> String {
-    let max_steps = 10000;
-    let num_runs = 500;
-    let mut num_steps = 0;
+    fn compat_coefficients(&self) -> genes::CompatCoefficients {
+        genes::STANDARD_COMPAT_COEFFICIENTS
+    }
 
-    //let seed: &[_] = &[42];
-    let seed: &[_] = &[rand::thread_rng().gen::<usize>()];
-    let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+    fn initial_genome(&self) -> genes::Genome {
+        genes::Genome::initial_genome(ROAD_WIDTH * (ROAD_HEIGHT+0), 1, 0, true)
+    }
 
-    let mut str = String::new();
+    fn node_names(&self) -> HashMap<genes::NodeId, String> {
+        /*[(0, "P0".to_string()), (1, "P1".to_string()), (2, "P2".to_string()),
+         (3, "00".to_string()), (4, "01".to_string()), (5, "02".to_string()),
+         (6, "10".to_string()), (7, "11".to_string()), (8, "12".to_string()),
+         (9, "20".to_string()), (10, "21".to_string()), (11, "22".to_string()),
+         (12, "B".to_string()), (13, "O".to_string())].into_iter().collect()*/
 
-    network.flush();
+        let mut map = HashMap::new();
 
-    for _ in 0..num_runs {
-        let mut state = initial_state(rng.gen::<usize>());
+        map.insert(0, "P0".to_string());
+        map.insert(1, "P1".to_string());
+        map.insert(2, "P2".to_string());
+        map.insert(3, "01".to_string());
+        map.insert(4, "11".to_string());
+        map.insert(5, "21".to_string());
+        map.insert(6, "02".to_string());
+        map.insert(7, "12".to_string());
+        map.insert(8, "22".to_string());
+        map.insert(9, "03".to_string());
+        map.insert(10, "13".to_string());
+        map.insert(11, "23".to_string());
+        map.insert(12, "B".to_string());
+        map.insert(13, "O".to_string());
+
+        map
+    }
+
+    fn evaluate(&self, network: &mut nn::Network, organisms: &[pop::Organism]) -> f64 {
+        let max_steps = 10000;
+        let num_runs = 500;
+        let mut num_steps = 0;
+
+        let seed: &[_] = &[1337];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+
+        for _ in 0..num_runs {
+            let mut state = initial_state(rng.gen::<usize>());
+            network.flush();
+
+            for _ in 0..max_steps {
+                let input = network_input(&state, network);
+                road_game_step(&mut state, input);
+                num_steps += 1;
+                if state.hit_now {
+                    break;
+                }
+            }
+        }
+
+        (num_steps as f64 / num_runs as f64).powf(2.0)
+    }
+
+    fn evaluate_to_string(&self, network: &mut nn::Network) -> String {
+        let max_steps = 10000;
+        let num_runs = 500;
+        let mut num_steps = 0;
+
+        //let seed: &[_] = &[42];
+        let seed: &[_] = &[rand::thread_rng().gen::<usize>()];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+
+        let mut str = String::new();
+
         network.flush();
 
-        for _ in 0..max_steps {
+        for _ in 0..num_runs {
+            let mut state = initial_state(rng.gen::<usize>());
+            network.flush();
+
+            for _ in 0..max_steps {
+                str.push_str(&state_to_string(&state));
+                str.push_str(&"---\n");
+
+                let input = network_input(&state, network);
+                road_game_step(&mut state, input);
+                num_steps += 1;
+                if state.hit_now {
+                    break;
+                }
+            }
+
             str.push_str(&state_to_string(&state));
-            str.push_str(&"---\n");
 
-            let input = network_input(&state, network);
-            road_game_step(&mut state, input);
-            num_steps += 1;
-            if state.hit_now {
-                break;
-            }
+            str.push_str(&"=================\n");
         }
 
-        str.push_str(&state_to_string(&state));
-
-        str.push_str(&"=================\n");
+        format!("Steps per run: {}\n", num_steps as f64 / num_runs as f64) + &str
     }
 
-    format!("Steps per run: {}\n", num_steps as f64 / num_runs as f64) + &str
+    fn post_evaluation(&mut self, population: &pop::Population) {
+
+    }
 }
+
