@@ -197,7 +197,7 @@ impl exp::Experiment for RoadGameExperiment {
         map
     }
 
-    fn evaluate(&self, network: &mut nn::Network) -> f64 {
+    fn evaluate(&self, network: &mut nn::Network, population: &pop::Population) -> f64 {
         let max_steps = 10000;
         let num_runs = 500;
         let mut num_steps = 0;

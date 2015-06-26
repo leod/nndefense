@@ -577,7 +577,7 @@ impl exp::Experiment for TicTacToeExperiment {
         map
     }
 
-    fn evaluate(&self, network: &mut nn::Network) -> f64 {
+    fn evaluate(&self, network: &mut nn::Network, population: &pop::Population) -> f64 {
         score_network(network, &mut BestStrategy { forkable: false }, 100) + 
         score_network(network, &mut BestStrategy { forkable: true }, 100) + 
         score_network(network, &mut RandomStrategy, 100) +
