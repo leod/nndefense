@@ -6,7 +6,9 @@ use std::io;
 use std::fs::File;
 use std::path::Path;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+use rustc_serialize::json::{self, ToJson, Json};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, RustcEncodable, RustcDecodable)]
 pub enum NodeType {
     Input,
     Output,
@@ -16,13 +18,13 @@ pub enum NodeType {
 
 pub type NodeId = usize;
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, RustcEncodable, RustcDecodable)]
 pub struct Node {
     pub id: NodeId,
     pub node_type: NodeType,
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, RustcEncodable, RustcDecodable)]
 pub struct Link {
     pub from_id: NodeId,
     pub to_id: NodeId,
@@ -32,7 +34,7 @@ pub struct Link {
     pub is_recurrent: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, RustcEncodable, RustcDecodable)]
 pub struct Genome {
     pub nodes: Vec<Node>,
     pub links: Vec<Link>, // Sorted by innovation number in increasing order
@@ -48,7 +50,7 @@ pub struct CompatCoefficients {
 pub static STANDARD_COMPAT_COEFFICIENTS: CompatCoefficients = CompatCoefficients {
     disjoint: 1.0,
     excess: 1.0,
-    weight_diff: 2.0,
+    weight_diff: 0.4,
 };
 
 pub fn compatibility(c: &CompatCoefficients,
@@ -352,5 +354,18 @@ impl Genome {
             Ok(_) => Ok(()),
             Err(e) => Err(e)
         }
+    }
+
+    pub fn save(&self, path: &Path) {
+        let mut f = File::create(path).unwrap();
+        f.write_all(json::encode(&self).unwrap().as_bytes()).unwrap();
+    }
+    
+    pub fn load(path: &Path) -> Genome {
+        let mut f = File::open(path).unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+
+        json::decode(&s).unwrap()
     }
 }

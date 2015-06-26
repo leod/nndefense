@@ -1,4 +1,5 @@
 extern crate rand;
+extern crate rustc_serialize;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -111,13 +112,20 @@ fn evaluate_multi_threaded(experiment: &exp::Experiment, population: &mut pop::P
 }
 
 fn main() {
-    exp::tictactoe::play(&mut exp::tictactoe::random_strategy, &mut exp::tictactoe::random_strategy, true);
+    /*exp::tictactoe::play(&mut exp::tictactoe::RandomStrategy,
+                         &mut exp::tictactoe::BestStrategy { forkable: false },
+                         true);*/
+
+    /*exp::tictactoe::play(&mut exp::tictactoe::BestStrategy { forkable: false },
+                         &mut exp::tictactoe::BestStrategy { forkable: false },
+                         true);*/
 
     let mut i = 0;
     let mut rng = rand::thread_rng();
 
-    let num_population = 100;
-    let mut experiment = exp::roadgame::RoadGameExperiment;
+    let num_population = 200;
+    //let mut experiment = exp::roadgame::RoadGameExperiment;
+    let mut experiment = exp::tictactoe::TicTacToeExperiment;
     let initial_genome = experiment.initial_genome();
 
     let mut population = pop::Population::from_initial_genome(&mut rng,
@@ -154,6 +162,13 @@ fn main() {
         {
             let mut best = population.best_organism().unwrap().clone();
 
+            println!("best: {}, best forkable: {}, random: {}, center: {}, bad: {}",
+                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BestStrategy { forkable: false }, 100),
+                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BestStrategy { forkable: true }, 100),
+                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::RandomStrategy, 100),
+                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::CenterStrategy, 100),
+                     exp::tictactoe::score_network(&mut best.network, &mut exp::tictactoe::BadStrategy, 100));
+
             /*let mut f = File::create(&Path::new(&format!("networks/runs/{}.txt", i))).unwrap();
             f.write_all(exp::roadgame::evaluate_to_death_to_string(&mut best.network).as_bytes()).unwrap();*/
 
@@ -163,6 +178,8 @@ fn main() {
             best.genome.compile_to_png(experiment.node_names(),
                                        Path::new(&format!("networks/dot/{}.dot", i)),
                                        Path::new(&format!("networks/{}-{}.png", i, best.fitness))).unwrap();
+
+            best.genome.save(Path::new(&format!("networks/best/{}.json", i)));
 
             /*for (j, species) in population.species.iter().enumerate() {
                 species.best_genome.compile_to_png(Path::new(&format!("networks/dot/{}_{}.dot", i, j)),

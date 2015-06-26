@@ -12,14 +12,14 @@ pub struct Settings {
     pub survival_threshold: f64,
     pub compat_threshold: f64,
     pub dropoff_age: usize,
-    pub target_num_species: usize,
+    pub target_num_species: Option<usize>,
 }
 
 pub static STANDARD_SETTINGS: Settings = Settings {
-    survival_threshold: 0.3,
-    compat_threshold: 6.0,
-    dropoff_age: 15,
-    target_num_species: 10
+    survival_threshold: 0.2,
+    compat_threshold: 0.9,
+    dropoff_age: 35,
+    target_num_species: Some(10)
 };
 
 #[derive(Clone)]
@@ -204,7 +204,7 @@ impl Species {
             }
         }
 
-        while offspring.len() < self.expected_offspring { // HACK: Leave room for the champ
+        while offspring.len() < self.expected_offspring {
             if rng.next_f64() < mutation_settings.mutate_only_prob {
                 // Pick one organism and just mutate it and that's the new offspring
                 let organism_index = rng.gen_range(0, self.organisms.len());
@@ -452,11 +452,13 @@ impl Population {
 
         // Adjust the threshold by which we consider two organisms to be in the same species.
         // We try to keep the number of species constant (though this does not always seem to work).
-        if self.generation > 0 {
-            if self.species.len() < self.settings.target_num_species {
+        if self.settings.target_num_species.is_some() && self.generation > 0 {
+            let target_num = self.settings.target_num_species.unwrap();
+
+            if self.species.len() < target_num {
                 self.settings.compat_threshold -= 0.3;
             }
-            if self.species.len() > self.settings.target_num_species {
+            if self.species.len() > target_num {
                 self.settings.compat_threshold += 0.3;
             }
 

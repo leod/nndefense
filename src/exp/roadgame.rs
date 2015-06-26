@@ -7,6 +7,7 @@ use rand::SeedableRng;
 use genes;
 use nn;
 use exp;
+use pop;
 
 const ROAD_WIDTH: usize = 3; 
 const ROAD_HEIGHT: usize = 4;
@@ -220,40 +221,45 @@ impl exp::Experiment for RoadGameExperiment {
 
         (num_steps as f64 / num_runs as f64).powf(2.0)
     }
-}
 
-pub fn evaluate_to_string(network: &mut nn::Network) -> String {
-    let max_steps = 10000;
-    let num_runs = 500;
-    let mut num_steps = 0;
+    fn evaluate_to_string(&self, network: &mut nn::Network) -> String {
+        let max_steps = 10000;
+        let num_runs = 500;
+        let mut num_steps = 0;
 
-    let seed: &[_] = &[1337];
-    let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
+        let seed: &[_] = &[1337];
+        let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
-    let mut str = String::new();
+        let mut str = String::new();
 
-    network.flush();
-
-    for _ in 0..num_runs {
-        let mut state = initial_state(rng.gen::<usize>());
         network.flush();
 
-        for _ in 0..max_steps {
-            str.push_str(&state_to_string(&state));
-            str.push_str(&"---\n");
+        for _ in 0..num_runs {
+            let mut state = initial_state(rng.gen::<usize>());
+            network.flush();
 
-            let input = network_input(&state, network);
-            road_game_step(&mut state, input);
-            num_steps += 1;
-            if state.hit_now {
-                break;
+            for _ in 0..max_steps {
+                str.push_str(&state_to_string(&state));
+                str.push_str(&"---\n");
+
+                let input = network_input(&state, network);
+                road_game_step(&mut state, input);
+                num_steps += 1;
+                if state.hit_now {
+                    break;
+                }
             }
+
+            str.push_str(&state_to_string(&state));
+
+            str.push_str(&"=================\n");
         }
 
-        str.push_str(&state_to_string(&state));
-
-        str.push_str(&"=================\n");
+        format!("Steps per run: {}\n", num_steps as f64 / num_runs as f64) + &str
     }
 
-    format!("Steps per run: {}\n", num_steps as f64 / num_runs as f64) + &str
+    fn post_evaluation(&mut self, population: &pop::Population) {
+
+    }
 }
+
